@@ -13,6 +13,7 @@
 #include "drv_sdhci.h"
 #include "mmc.h"
 #include "util.h"
+#include "l4/sys/cache.h"
 
 namespace Emmc {
 
@@ -365,8 +366,12 @@ Sdhci::cmd_submit(Cmd *cmd)
               if (_bb_size && cmd->flags.inout())
                 {
                   if (!cmd->flags.inout_read())
-                    memcpy((void *)_bb_virt, cmd->blocks->virt_addr,
-                           cmd->blocksize * cmd->blockcnt);
+                    {
+                      memcpy((void *)_bb_virt, cmd->blocks->virt_addr,
+                             cmd->blocksize * cmd->blockcnt);
+                      l4_cache_flush_data(_bb_virt, _bb_virt + cmd->blocksize
+                                                      * cmd->blockcnt);
+                    }
                   dma_addr = cmd->data_phys = _bb_phys;
                 }
               else
@@ -598,6 +603,7 @@ Sdhci::cmd_fetch_response(Cmd *cmd)
       for (auto b = cmd->blocks; b; b = b->next.get())
         {
           l4_uint32_t b_size = b->num_sectors << 9;
+          l4_cache_inv_data(_bb_virt + offset, _bb_virt + offset + b_size);
           memcpy(b->virt_addr, (void *)(_bb_virt + offset), b_size);
           offset += b_size;
         }
@@ -860,7 +866,11 @@ Sdhci::adma2_set_desc(T *desc, Cmd *cmd)
           if (offset + b_size > _bb_size)
             L4Re::throw_error(-L4_EINVAL, "Bounce buffer too small");
           if (!cmd->flags.inout_read())
-            memcpy((void *)(_bb_virt + offset), b->virt_addr, b_size);
+            {
+              memcpy((void *)(_bb_virt + offset), b->virt_addr, b_size);
+              l4_cache_flush_data(_bb_virt + offset,
+                                  _bb_virt + offset + b_size);
+            }
           for (; b_size; ++desc)
             {
               trace2.printf("  addr=%08llx size=%08x\n", _bb_phys + offset, b_size);
