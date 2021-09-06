@@ -28,6 +28,7 @@ static Dbg info(Dbg::Info, "main");
 static Dbg trace(Dbg::Trace, "main");
 
 static Emmc::Mmc::Reg_ecsd::Ec196_device_type device_type_disable(0);
+static int max_seg = 64;
 
 static char const *usage_str =
 "Usage: %s [-vq] --client CAP --ds-max NUM]\n"
@@ -38,7 +39,8 @@ static char const *usage_str =
 " --disable-mode MODE  Disable a certain eMMC mode (can be used more than once\n"
 "                      (MODE is hs26|hs52|hs200|hs400)\n"
 " --client CAP         Add a static client via the CAP capability\n"
-" --ds-max NUM         Specify maximum number of dataspaces the client can register\n";
+" --ds-max NUM         Specify maximum number of dataspaces the client can register\n"
+" --max-seg NUM        Specify maximum number of segments one vio request can have\n";
 
 using Base_device_mgr = Block_device::Device_mgr<
   Emmc::Base_device,
@@ -209,6 +211,7 @@ parse_args(int argc, char *const *argv)
     OPT_DS_MAX,
     OPT_READONLY,
     OPT_DISABLE_MODE,
+    OPT_MAX_SEG,
   };
 
   static struct option const loptions[] =
@@ -220,6 +223,7 @@ parse_args(int argc, char *const *argv)
     { "ds-max",         required_argument,      NULL,   OPT_DS_MAX },
     { "readonly",       no_argument,            NULL,   OPT_READONLY },
     { "disable-mode",   required_argument,      NULL,   OPT_DISABLE_MODE },
+    { "max-seg",        required_argument,      NULL,   OPT_MAX_SEG },
     { 0,                0,                      NULL,   0, },
   };
 
@@ -276,6 +280,9 @@ parse_args(int argc, char *const *argv)
           break;
         case OPT_DS_MAX:
           opts.ds_max = atoi(optarg);
+          break;
+        case OPT_MAX_SEG:
+          max_seg = atoi(optarg);
           break;
         default:
           warn.printf(usage_str, argv[0]);
@@ -443,7 +450,8 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
           drv.add_disk(cxx::make_ref_obj<Emmc::Device<Emmc::Sdhci>>(
                          device_nr++, mmio_addr, iocap, mmio_space, irq_num,
                          is_irq_level, icu, dma, server.registry(),
-                         dev_type == Dev_usdhc, host_clock, device_type_disable),
+                         dev_type == Dev_usdhc, host_clock, max_seg,
+                         device_type_disable),
                        device_scan_finished);
           break;
 
@@ -456,7 +464,7 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
           drv.add_disk(cxx::make_ref_obj<Emmc::Device<Emmc::Sdhi>>(
                          device_nr++, mmio_addr, iocap, mmio_space, irq_num,
                          is_irq_level, icu, dma, server.registry(),
-                         false, host_clock, device_type_disable),
+                         false, host_clock, max_seg, device_type_disable),
                        device_scan_finished);
           break;
 
@@ -468,7 +476,7 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
           drv.add_disk(cxx::make_ref_obj<Emmc::Device<Emmc::Sdhi>>(
                          device_nr++, mmio_addr, iocap, mmio_space, irq_num,
                          is_irq_level, icu, dma, server.registry(),
-                         false, host_clock, device_type_disable),
+                         false, host_clock, max_seg, device_type_disable),
                        device_scan_finished);
           break;
 

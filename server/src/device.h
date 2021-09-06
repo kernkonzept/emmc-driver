@@ -53,6 +53,7 @@ public:
     Voltage_delay_ms = 10,      ///< Delay after changing voltage [us]
     Stats_delay_us = 1000000,   ///< Delay between showing stats (info+) [us]
     Timeout_irq_us = 100000,    ///< timeout for receiving IRQs [us]
+    Max_size = 4 << 20,
   };
 
   enum Medium_type
@@ -68,7 +69,8 @@ public:
          int irq_num, bool is_irq_level, L4::Cap<L4::Icu> icu,
          L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
          L4Re::Util::Object_registry *registry, bool is_usdhc,
-         l4_uint32_t host_clock, Mmc::Reg_ecsd::Ec196_device_type dt_disable);
+         l4_uint32_t host_clock, int max_seg,
+         Mmc::Reg_ecsd::Ec196_device_type dt_disable);
 
   void handle_irq();
 
@@ -92,14 +94,18 @@ private:
    * 65535 * 512 = 32MB - 512.
    */
   l4_size_t max_size() const override
-  { return _drv._bb_size ? _drv._bb_size : 4 << 20; }
+  {
+    return _drv._bb_size ?
+      cxx::min(_drv._bb_size / _max_seg, (l4_size_t)Max_size) :
+      (l4_size_t)Max_size;
+  }
 
   /**
    * Without bounce buffer it should be possible to handle more than 1
    * segment.
    */
   unsigned max_segments() const override
-  { return _drv._bb_size ? 1 : 1; }
+  { return _max_seg; }
 
   Discard_info discard_info() const override
   {
@@ -202,6 +208,7 @@ private:
   L4::Cap<L4::Irq> _irq;        ///< interrupt capability
   L4::Cap<L4::Icu> _icu;        ///< ICU capability
   L4Re::Util::Shared_cap<L4Re::Dma_space> _dma;
+  int _max_seg;
 
   /// Device-related
   l4_uint64_t _addr_mult = 1;   ///< sector size multiplier

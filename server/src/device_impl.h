@@ -43,7 +43,7 @@ Device<Driver>::Device(int nr, l4_addr_t mmio_addr,
                        int irq_num, bool is_irq_level, L4::Cap<L4::Icu> icu,
                        L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
                        L4Re::Util::Object_registry *registry, bool is_usdhc,
-                       l4_uint32_t host_clock,
+                       l4_uint32_t host_clock, int max_seg,
                        Mmc::Reg_ecsd::Ec196_device_type dt_disable)
 : _drv(nr, iocap, mmio_space, mmio_addr, is_usdhc, dma, host_clock,
        [this](bool is_data) { receive_irq(is_data); }),
@@ -51,6 +51,7 @@ Device<Driver>::Device(int nr, l4_addr_t mmio_addr,
   _is_irq_level(is_irq_level),
   _icu(icu),
   _dma(dma),
+  _max_seg(max_seg),
   _registry(registry),
   _io_buf("iobuf", 512, _dma,
           L4Re::Dma_space::Direction::From_device,
@@ -115,6 +116,10 @@ Device<Driver>::bounce_buffer_allocate(char const *cap_name)
                           | L4Re::Rm::F::Cache_normal,
                           L4::Ipc::make_cap_rw(cap), 0, L4_PAGESHIFT),
                "Attach bounce buffer");
+
+  // We should have at least one page per segment
+  if (size / _max_seg < L4_PAGESIZE)
+    L4Re::throw_error(-L4_EINVAL, "Bounce buffer is too small for max seg count");
 
   _drv._bb_size = size;
   _drv._bb_phys = phys;
