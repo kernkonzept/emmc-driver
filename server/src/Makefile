@@ -13,7 +13,7 @@ SRC_CC  = main.cc \
 	  mmio.cc \
 	  util.cc
 
-REQUIRES_LIBS  := libio-vbus libblock-device
+REQUIRES_LIBS  := libio-vbus libblock-device libpthread
 
 include $(L4DIR)/mk/prog.mk
 
