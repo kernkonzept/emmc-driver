@@ -1,8 +1,9 @@
-/* SPDX-License-Identifier: GPL-2.0-only or License-Ref-kk-custom */
 /*
  * Copyright (C) 2020 Kernkonzept GmbH.
  * Author(s): Frank Mehnert <frank.mehnert@kernkonzept.com>
  *            Jakub Jermar <jakub.jermar@kernkonzept.com>
+ *
+ * License: see LICENSE.spdx (in this directory or the directories above)
  */
 
 #pragma once
