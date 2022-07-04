@@ -48,6 +48,7 @@ public:
   enum
   {
     Dma_map_workaround = true,  ///< See #CD-202!
+    Dma_map_all = false,
     Sector_size = 512U,
     Hid_max_length = 36,
     Voltage_delay_ms = 10,      ///< Delay after changing voltage [us]
@@ -129,9 +130,23 @@ private:
 
   void reset() override;
 
+  int dma_map_all(Block_device::Mem_region *region, l4_addr_t offset,
+              l4_size_t num_sectors, L4Re::Dma_space::Direction dir,
+              L4Re::Dma_space::Dma_addr *phys);
+
+  int dma_map_single(Block_device::Mem_region *region, l4_addr_t offset,
+              l4_size_t num_sectors, L4Re::Dma_space::Direction dir,
+              L4Re::Dma_space::Dma_addr *phys);
+
   int dma_map(Block_device::Mem_region *region, l4_addr_t offset,
               l4_size_t num_sectors, L4Re::Dma_space::Direction dir,
               L4Re::Dma_space::Dma_addr *phys) override;
+
+  int dma_unmap_all(L4Re::Dma_space::Dma_addr phys, l4_size_t num_sectors,
+                L4Re::Dma_space::Direction dir);
+
+  int dma_unmap_single(L4Re::Dma_space::Dma_addr phys, l4_size_t num_sectors,
+                L4Re::Dma_space::Direction dir);
 
   int dma_unmap(L4Re::Dma_space::Dma_addr phys, l4_size_t num_sectors,
                 L4Re::Dma_space::Direction dir) override;
@@ -274,6 +289,7 @@ private:
   typedef std::map<l4_addr_t, Phys_entry> Offs_entry;
   std::map<l4_cap_idx_t, Offs_entry> _ds_offs_map;
   std::map<L4Re::Dma_space::Dma_addr, Ds_offs_entry> _phys_map;
+  std::map<l4_cap_idx_t, L4Re::Dma_space::Dma_addr> _ds_map;
   //
   // ::::::::::::::::::::::::::
 };

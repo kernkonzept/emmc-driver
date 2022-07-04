@@ -151,9 +151,41 @@ Device<Driver>::reset()
 
 template <class Driver>
 int
-Device<Driver>::dma_map(Block_device::Mem_region *region, l4_addr_t offset,
-                l4_size_t num_sectors, L4Re::Dma_space::Direction dir,
-                L4Re::Dma_space::Dma_addr *phys)
+Device<Driver>::dma_map_all(Block_device::Mem_region *region, l4_addr_t offset,
+                            l4_size_t num_sectors, L4Re::Dma_space::Direction dir,
+                            L4Re::Dma_space::Dma_addr *phys)
+{
+  L4Re::Dma_space::Dma_addr p = 0;
+  l4_size_t ds_size = region->ds()->size();
+
+  auto addr = _ds_map.find(region->ds().cap());
+  if (addr == _ds_map.end())
+    {
+      auto ret = _dma->map(L4::Ipc::make_cap_rw(region->ds()), 0,
+                           &ds_size, L4Re::Dma_space::Attributes::None,
+                           dir, &p);
+      if (ret < 0 || ds_size < num_sectors * sector_size())
+        {
+          *phys = 0;
+          warn.printf("Cannot resolve physical address (ret = %ld, %zu < %zu).\n",
+                      ret, ds_size, num_sectors * sector_size());
+          return -L4_ENOMEM;
+        }
+      _ds_map.insert(std::make_pair(region->ds().cap(), p));
+    }
+  else
+    p = addr->second;
+
+  *phys = p + offset;
+
+  return L4_EOK;
+}
+
+template <class Driver>
+int
+Device<Driver>::dma_map_single(Block_device::Mem_region *region, l4_addr_t offset,
+                               l4_size_t num_sectors, L4Re::Dma_space::Direction dir,
+                               L4Re::Dma_space::Dma_addr *phys)
 {
   if (Dma_map_workaround)
     {
@@ -201,8 +233,28 @@ Device<Driver>::dma_map(Block_device::Mem_region *region, l4_addr_t offset,
 
 template <class Driver>
 int
-Device<Driver>::dma_unmap(L4Re::Dma_space::Dma_addr phys, l4_size_t num_sectors,
-                  L4Re::Dma_space::Direction dir)
+Device<Driver>::dma_map(Block_device::Mem_region *region, l4_addr_t offset,
+                l4_size_t num_sectors, L4Re::Dma_space::Direction dir,
+                L4Re::Dma_space::Dma_addr *phys)
+{
+  if (Dma_map_all)
+    return dma_map_all(region, offset, num_sectors, dir, phys);
+  else
+    return dma_map_single(region, offset, num_sectors, dir, phys);
+}
+
+template <class Driver>
+int
+Device<Driver>::dma_unmap_all(L4Re::Dma_space::Dma_addr, l4_size_t,
+                              L4Re::Dma_space::Direction)
+{
+  return L4_EOK;
+}
+
+template <class Driver>
+int
+Device<Driver>::dma_unmap_single(L4Re::Dma_space::Dma_addr phys, l4_size_t num_sectors,
+                                 L4Re::Dma_space::Direction dir)
 {
   if (Dma_map_workaround)
     {
@@ -241,6 +293,17 @@ Device<Driver>::dma_unmap(L4Re::Dma_space::Dma_addr phys, l4_size_t num_sectors,
 
   return _dma->unmap(phys, num_sectors * sector_size(),
                      L4Re::Dma_space::Attributes::None, dir);
+}
+
+template <class Driver>
+int
+Device<Driver>::dma_unmap(L4Re::Dma_space::Dma_addr phys, l4_size_t num_sectors,
+                  L4Re::Dma_space::Direction dir)
+{
+  if (Dma_map_all)
+    return dma_unmap_all(phys, num_sectors, dir);
+  else
+    return dma_unmap_single(phys, num_sectors, dir);
 }
 
 template <class Driver>
