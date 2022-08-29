@@ -7,6 +7,7 @@
  */
 
 #include <getopt.h>
+#include <map>
 
 #include <l4/sys/factory>
 #include <l4/vbus/vbus>
@@ -310,10 +311,30 @@ device_scan_finished()
     trace.printf("Device now accepts new clients.\n");
 }
 
+static L4Re::Util::Shared_cap<L4Re::Dma_space>
+create_dma_space(L4::Cap<L4vbus::Vbus> bus, long unsigned id)
+{
+  static std::map<long unsigned, L4Re::Util::Shared_cap<L4Re::Dma_space>> spaces;
+
+  auto ires = spaces.find(id);
+  if (ires != spaces.end())
+    return ires->second;
+
+  auto dma = L4Re::chkcap(L4Re::Util::make_shared_cap<L4Re::Dma_space>(),
+                          "Allocate capability for DMA space.");
+  L4Re::chksys(L4Re::Env::env()->user_factory()->create(dma.get()),
+               "Create DMA space.");
+  L4Re::chksys(
+    bus->assign_dma_domain(id, L4VBUS_DMAD_BIND | L4VBUS_DMAD_L4RE_DMA_SPACE,
+                           dma.get()),
+    "Assignment of DMA domain.");
+  spaces[id] = dma;
+  return dma;
+}
+
 static void
 scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
-            L4::Cap<L4vbus::Vbus> bus, L4::Cap<L4::Icu> icu,
-            L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma)
+            L4::Cap<L4vbus::Vbus> bus, L4::Cap<L4::Icu> icu)
 {
   l4_addr_t mmio_addr = 0;
   int irq_num = 0;
@@ -416,6 +437,22 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
       is_irq_level = false;
     }
 
+  unsigned long id = -1UL;
+  for (auto i = 0u; i < dev_info.num_resources; ++i)
+    {
+      l4vbus_resource_t res;
+      L4Re::chksys(dev.get_resource(i, &res), "Getting resource.");
+      if (res.type == L4VBUS_RESOURCE_DMA_DOMAIN)
+        {
+          id = res.start;
+          Dbg::trace().printf("Using device's DMA domain %lu.\n", res.start);
+          break;
+        }
+    }
+
+  if (id == -1UL)
+    Dbg::trace().printf("Using VBUS global DMA domain.\n");
+
   info.printf("Device @ %08lx: %sinterrupt: %d, %s-triggered.\n",
               mmio_addr, dev_type == Dev_qemu_sdhci ? "PCI " : "", irq_num,
               is_irq_level ? "level" : "edge");
@@ -443,6 +480,7 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
       // Here we can select the proper device type.
       auto iocap = dev.bus_cap();
       L4::Cap<L4Re::Mmio_space> mmio_space = L4::Cap<L4Re::Mmio_space>::Invalid;
+      auto dma = create_dma_space(bus, id);
       switch (dev_type)
         {
         case Dev_qemu_sdhci:
@@ -491,8 +529,7 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
 }
 
 static void
-device_discovery(L4::Cap<L4vbus::Vbus> bus, L4::Cap<L4::Icu> icu,
-                 L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma)
+device_discovery(L4::Cap<L4vbus::Vbus> bus, L4::Cap<L4::Icu> icu)
 {
   info.printf("Starting device discovery.\n");
 
@@ -506,7 +543,7 @@ device_discovery(L4::Cap<L4vbus::Vbus> bus, L4::Cap<L4::Icu> icu,
   while (root.next_device(&child, L4VBUS_MAX_DEPTH, &di) == L4_EOK)
     {
       trace.printf("Scanning child 0x%lx (%s).\n", child.dev_handle(), di.name);
-      scan_device(child, di, bus, icu, dma);
+      scan_device(child, di, bus, icu);
     }
 
   // marks the end of the device detection loop
@@ -528,18 +565,7 @@ setup_hardware()
                           "Allocate ICU capability.");
   L4Re::chksys(icudev.vicu(icu), "Request ICU capability.");
 
-  trace.printf("Creating DMA domain for vbus.\n");
-  auto dma = L4Re::chkcap(L4Re::Util::make_shared_cap<L4Re::Dma_space>(),
-                          "Allocate capability for DMA space.");
-  L4Re::chksys(L4Re::Env::env()->user_factory()->create(dma.get()),
-               "Create DMA space.");
-  L4Re::chksys(l4vbus_assign_dma_domain(vbus.cap(), -1U,
-                                        L4VBUS_DMAD_BIND
-                                        | L4VBUS_DMAD_L4RE_DMA_SPACE,
-                                        dma.get().cap()),
-               "Assignment of DMA domain.");
-
-  device_discovery(vbus, icu, dma);
+  device_discovery(vbus, icu);
 }
 
 } // namespace
