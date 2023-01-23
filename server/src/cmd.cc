@@ -102,6 +102,7 @@ std::string Cmd::cmd_to_str() const
     case 13: return "SEND_STATUS";
     case 14: return "BUSTEST_R";
     case 15: return "GO_INACTIVE_STATE";
+    case 18: return "READ_MULTIPLE_BLOCK";
     case 19: return "BUSTEST_W";
     case 23: return "SET_BLOCK_COUNT";
     case 24: return "WRITE_BLOCK";
@@ -117,6 +118,8 @@ std::string Cmd::cmd_to_str() const
     case 38: return "ERASE";
     case 39: return "FAST_IO";
     case 40: return "GO_IRQ_STATE";
+    case 41: return flags.app_cmd() ? "SD_SEND_OP_COND"  // ACMD41, SD-only
+                                    : "CMD_unknown";
     case 42: return "LOCK_UNLOCK";
     case 44: return "QUEUED_TASK_PARAMS";
     case 45: return "QUEUED_TASK_ADDRESS";
@@ -124,6 +127,8 @@ std::string Cmd::cmd_to_str() const
     case 47: return "EXECUTE_WRITE_TASK";
     case 48: return "CMDQ_TASK_MGMT";
     case 49: return "SET_TIME";
+    case 51: return flags.app_cmd() ? "SEND_SCR"         // ACMD51, SD-only
+                                    : "CMD_unknown";
     case 53: return "PROTOCOL_RD";
     case 54: return "PROTOCOL_WR";
     case 55: return "APP_CMD";

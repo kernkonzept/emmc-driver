@@ -1503,6 +1503,7 @@ Device<Driver>::mmc_app_cmd(Cmd *cmd, l4_uint32_t cmdval, l4_uint32_t arg,
     cmd->init_data(cmdval, arg, datalen, dataphys);
   else
     cmd->init_arg(cmdval, arg);
+  cmd->mark_app_cmd();
   cmd_exec(cmd);
 }
 

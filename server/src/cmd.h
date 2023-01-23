@@ -74,6 +74,8 @@ public:
     l4_uint32_t _raw = 0;
 
   public:
+    /// The previous command was CMD55 (APP_CMD). Only for logging.
+    CXX_BITFIELD_MEMBER(9, 9, app_cmd, _raw);
     /// Enable Auto CMD23 for this command during submission.
     CXX_BITFIELD_MEMBER(8, 8, auto_cmd23, _raw);
     /// Inout: 1 = read, 0 = write.
@@ -112,6 +114,10 @@ public:
     arg = 0;
     flags.reset();
   }
+
+  /** Mark a command as ACMD (previous command was CMD55). */
+  void mark_app_cmd()
+  { flags.app_cmd() = true; }
 
   /** Command with argument. */
   void init_arg(l4_uint32_t cmd_val, l4_uint32_t arg_val)
