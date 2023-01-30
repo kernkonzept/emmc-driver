@@ -103,13 +103,16 @@ public:
     stats_wait_done();
   }
 
+  bool using_bounce_buffer() const
+  { return _bb_size != 0; }
+
   Hw_regs     _regs;                    ///< Controller MMIO registers.
   Receive_irq _receive_irq;             ///< IRQ receive function.
   Cmd_queue   _cmd_queue;               ///< Command queue.
 
   L4Re::Dma_space::Dma_addr _bb_phys;   ///< Bounce buffer: DMA address.
-  l4_addr_t _bb_virt;                   ///< Bounce buffer: virtual address.
-  l4_size_t _bb_size;                   ///< Bounce buffer: size.
+  l4_addr_t _bb_virt = 0;               ///< Bounce buffer: virtual address.
+  l4_size_t _bb_size = 0;               ///< Bounce buffer: size.
 
   // Statistics
   l4_uint64_t _time_busy = 0;

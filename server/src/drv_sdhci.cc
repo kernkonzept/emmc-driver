@@ -363,7 +363,7 @@ Sdhci::cmd_submit(Cmd *cmd)
         {
           if (cmd->blocks)
             {
-              if (_bb_size && cmd->flags.inout())
+              if (using_bounce_buffer() && cmd->flags.inout())
                 {
                   if (!cmd->flags.inout_read())
                     {
@@ -596,8 +596,8 @@ Sdhci::cmd_fetch_response(Cmd *cmd)
         trace.printf("\033[35mCommand response R1 (%s)\033[m\n", s.str());
     }
 
-  if (_bb_size && (   cmd->cmd == Mmc::Cmd17_read_single_block
-                   || cmd->cmd == Mmc::Cmd18_read_multiple_block))
+  if (using_bounce_buffer() && (   cmd->cmd == Mmc::Cmd17_read_single_block
+                                || cmd->cmd == Mmc::Cmd18_read_multiple_block))
     {
       l4_uint32_t offset = 0;
       for (auto b = cmd->blocks; b; b = b->next.get())
@@ -856,9 +856,9 @@ void
 Sdhci::adma2_set_desc(T *desc, Cmd *cmd)
 {
   l4_size_t desc_size = _adma2_desc_mem.size();
-  trace2.printf("amda2_set_desc @ %08lx (bounce buffer):\n", (l4_addr_t)desc);
-  if (_bb_size && cmd->flags.inout())
+  if (using_bounce_buffer() && cmd->flags.inout())
     {
+      trace2.printf("amda2_set_desc @ %08lx (bounce buffer):\n", (l4_addr_t)desc);
       l4_uint32_t offset = 0;
       for (auto b = cmd->blocks; b; b = b->next.get())
         {
@@ -893,6 +893,7 @@ Sdhci::adma2_set_desc(T *desc, Cmd *cmd)
     }
   else
     {
+      trace2.printf("amda2_set_desc @ %08lx (direct):\n", (l4_addr_t)desc);
       for (auto b = cmd->blocks; b; b = b->next.get())
         {
           l4_uint64_t b_addr = b->dma_addr;

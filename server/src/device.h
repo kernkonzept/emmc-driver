@@ -96,7 +96,7 @@ private:
    */
   l4_size_t max_size() const override
   {
-    return _drv._bb_size ?
+    return _drv.using_bounce_buffer() ?
       cxx::min(_drv._bb_size / _max_seg, (l4_size_t)Max_size) :
       (l4_size_t)Max_size;
   }
