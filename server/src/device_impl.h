@@ -413,7 +413,7 @@ Device<Driver>::start_device_scan(Errand::Callback const &cb)
         long handle_irq()
         { return 0; }
       };
-      Wakeup_handler wakeup;
+      auto wakeup = std::make_shared<Wakeup_handler>();
 
       bool failed = false;
       try
@@ -469,15 +469,15 @@ Device<Driver>::start_device_scan(Errand::Callback const &cb)
                    "Unbind IRQ after initialization.");
 
       // Register wakeup object -- see below.
-      _registry->register_irq_obj(&wakeup);
+      _registry->register_irq_obj(wakeup.get());
 
       // Schedule an immediate errand. But currently the server loop is most
       // likely waiting for requests. Well, we could also move the following
       // code to wakeup::handle_irq() but in that case, joining the init thread
       // gets difficult as wakeup is stored in the context of the init thread.
-      Errand::schedule([this, cb, failed, &wakeup]
+      Errand::schedule([this, cb, failed, wakeup]
         {
-          _registry->unregister_obj(&wakeup);
+          _registry->unregister_obj(wakeup.get());
           _init_thread.join();
 
           if (!failed)
@@ -495,7 +495,7 @@ Device<Driver>::start_device_scan(Errand::Callback const &cb)
         }, 0);
 
       // Wakeup the server loop.
-      wakeup.obj_cap()->trigger();
+      wakeup->obj_cap()->trigger();
     });
 }
 
