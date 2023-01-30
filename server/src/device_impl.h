@@ -313,40 +313,51 @@ Device<Driver>::inout_data(l4_uint64_t sector,
                            Block_device::Inout_callback const &cb,
                            L4Re::Dma_space::Direction dir)
 {
-  Cmd *cmd = _drv.cmd_create();
-  if (!cmd)
-    return -L4_EBUSY;
-  cmd->cb_io = cb;
-
-  bool inout_read = dir == L4Re::Dma_space::Direction::From_device;
-
-  unsigned segments = 0;
-  for (Block_device::Inout_block const *b = &blocks; b; b = b->next.get())
+  try
     {
-      l4_size_t size = b->num_sectors * sector_size();
-      if (size > max_size())
-        L4Re::throw_error(-L4_EINVAL, "Segment size in inout_data()");
-      ++segments;
+      Cmd *cmd = _drv.cmd_create();
+      if (!cmd)
+        return -L4_EBUSY;
+      cmd->cb_io = cb;
+
+      bool inout_read = dir == L4Re::Dma_space::Direction::From_device;
+
+      unsigned segments = 0;
+      for (Block_device::Inout_block const *b = &blocks; b; b = b->next.get())
+        {
+          l4_size_t size = b->num_sectors * sector_size();
+          if (size > max_size())
+            L4Re::throw_error(-L4_EINVAL, "Segment size in inout_data()");
+          ++segments;
+        }
+
+      // enforced in Block_device::Virtio_client::build_inout_blocks()
+      assert(segments <= max_segments());
+
+      cmd->init_inout(sector, &blocks, cb, inout_read);
+
+      if (_drv.dma_adma2())
+        {
+          /* For all blocks together, do a single CMD23 (set_block_count_adma2())
+           * followed by a single CMD18/CMD25 (handle_irq_inout_adma2()). */
+          set_block_count_adma2(cmd);
+        }
+      else
+        {
+          /* For every block do CMD23 followed by CMD18/CMD25. */
+          transfer_block_sdma(cmd);
+        }
+
+      cmd_queue_kick();
+    }
+  catch (L4::Runtime_error const &e)
+    {
+      warn.printf("inout_data fails: %s: %s.\n", e.str(), e.extra_str());
+      // -L4_EBUSY is only appropriate in certain cases (for example, there is
+      // currently no free command slot), therefore rather enforce an IO error.
+      return -L4_EINVAL;
     }
 
-  if (segments > max_segments())
-    L4Re::throw_error(-L4_EINVAL, "Number of segments in inout_data()");
-
-  cmd->init_inout(sector, &blocks, cb, inout_read);
-
-  if (_drv.dma_adma2())
-    {
-      /* For all blocks together, do a single CMD23 (set_block_count_adma2())
-       * followed by a single CMD18/CMD25 (handle_irq_inout_adma2()). */
-      set_block_count_adma2(cmd);
-    }
-  else
-    {
-      /* For every block do CMD23 followed by CMD18/CMD25. */
-      transfer_block_sdma(cmd);
-    }
-
-  cmd_queue_kick();
   return L4_EOK;
 }
 
