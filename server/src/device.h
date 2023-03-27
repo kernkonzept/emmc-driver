@@ -28,16 +28,7 @@ namespace Emmc {
 class Base_device
 : public Block_device::Device,
   public Block_device::Device_discard_feature
-{
-public:
-  enum { Default_client = -1 };
-
-  void set_client_id(int client_id) { _client_id = client_id; }
-  int get_client_id() const { return _client_id; }
-
-private:
-  int _client_id = Default_client;
-};
+{};
 
 template <class Driver>
 class Device
