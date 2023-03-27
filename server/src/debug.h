@@ -43,7 +43,7 @@ public:
   { return Dbg(Dbg::Trace2, subsys); }
 
 private:
-  char const *create_comp_str(char const *comp, int nr)
+  char const *create_comp_str(char const *const comp, int nr)
   {
     if (nr == -1)
       return comp;

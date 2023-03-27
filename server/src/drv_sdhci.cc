@@ -370,7 +370,7 @@ Sdhci::cmd_submit(Cmd *cmd)
                       memcpy((void *)_bb_virt, cmd->blocks->virt_addr,
                              cmd->blocksize * cmd->blockcnt);
                       l4_cache_flush_data(_bb_virt, _bb_virt + cmd->blocksize
-                                                      * cmd->blockcnt);
+                                                             * cmd->blockcnt);
                     }
                   dma_addr = cmd->data_phys = _bb_phys;
                 }
@@ -845,6 +845,74 @@ Sdhci::dump() const
     warn.printf("  %04x: %08x\n", i, (unsigned)_regs[i]);
 }
 
+template<typename T>
+void
+Sdhci::adma2_set_desc_bb(T *desc, Cmd const *cmd, l4_size_t desc_size)
+{
+  trace2.printf("amda2_set_desc @ %08lx (bounce buffer):\n", (l4_addr_t)desc);
+  l4_uint32_t offset = 0;
+  for (auto b = cmd->blocks; b; b = b->next.get())
+    {
+      l4_uint32_t b_size = b->num_sectors << 9;
+      if (offset + b_size > _bb_size)
+        L4Re::throw_error(-L4_EINVAL, "Bounce buffer too small");
+      if (!cmd->flags.inout_read())
+        {
+          memcpy((void *)(_bb_virt + offset), b->virt_addr, b_size);
+          l4_cache_flush_data(_bb_virt + offset, _bb_virt + offset + b_size);
+        }
+      for (; b_size; ++desc)
+        {
+          trace2.printf("  addr=%08llx size=%08x\n", _bb_phys + offset, b_size);
+          if (desc_size < sizeof(T))
+            L4Re::throw_error(-L4_EINVAL, "Too many ADMA2 descriptors");
+          desc->reset();
+          desc->valid() = 1;
+          desc->act() = Adma2_desc_32::Act_tran;
+          // XXX SD spec also defines 26-bit data length mode
+          l4_uint32_t length = cxx::min(b_size, 32768U);
+          desc->length() = length;
+          desc->set_addr(_bb_phys + offset);
+          offset += length;
+          b_size -= length;
+          desc_size -= sizeof(T);
+          if (!b_size && !b->next.get())
+            desc->end() = 1;
+        }
+    }
+}
+
+template<typename T>
+void
+Sdhci::adma2_set_desc_direct(T *desc, Cmd const *cmd, l4_size_t desc_size)
+{
+  trace2.printf("amda2_set_desc @ %08lx (direct):\n", (l4_addr_t)desc);
+  for (auto b = cmd->blocks; b; b = b->next.get())
+    {
+      l4_uint64_t b_addr = b->dma_addr;
+      for (l4_uint32_t b_size = b->num_sectors << 9; b_size; ++desc)
+        {
+          trace2.printf("  addr=%08llx size=%08x\n", b_addr, b_size);
+          if (desc_size < sizeof(T))
+            L4Re::throw_error(-L4_EINVAL, "Too many ADMA2 descriptors");
+          desc->reset();
+          desc->valid() = 1;
+          desc->act() = Adma2_desc_32::Act_tran;
+          // XXX SD spec also defines 26-bit data length mode
+          l4_uint32_t length = cxx::min(b_size, 32768U);
+          desc->length() = length;
+          if (b_addr >= T::get_max_addr())
+            L4Re::throw_error(-L4_EINVAL, "Implement 64-bit ADMA2 mode");
+          desc->set_addr(b_addr);
+          b_addr += length;
+          b_size -= length;
+          desc_size -= sizeof(T);
+          if (!b_size && !b->next.get())
+            desc->end() = 1;
+        }
+    }
+}
+
 /**
  * Set up a ADMA2 descriptor table.
  *
@@ -853,77 +921,17 @@ Sdhci::dump() const
  */
 template<typename T>
 void
-Sdhci::adma2_set_desc(T *desc, Cmd *cmd)
+Sdhci::adma2_set_desc(T *desc, Cmd const *cmd)
 {
   l4_size_t desc_size = _adma2_desc_mem.size();
   if (using_bounce_buffer() && cmd->flags.inout())
-    {
-      trace2.printf("amda2_set_desc @ %08lx (bounce buffer):\n", (l4_addr_t)desc);
-      l4_uint32_t offset = 0;
-      for (auto b = cmd->blocks; b; b = b->next.get())
-        {
-          l4_uint32_t b_size = b->num_sectors << 9;
-          if (offset + b_size > _bb_size)
-            L4Re::throw_error(-L4_EINVAL, "Bounce buffer too small");
-          if (!cmd->flags.inout_read())
-            {
-              memcpy((void *)(_bb_virt + offset), b->virt_addr, b_size);
-              l4_cache_flush_data(_bb_virt + offset,
-                                  _bb_virt + offset + b_size);
-            }
-          for (; b_size; ++desc)
-            {
-              trace2.printf("  addr=%08llx size=%08x\n", _bb_phys + offset, b_size);
-              if (desc_size < sizeof(T))
-                L4Re::throw_error(-L4_EINVAL, "Too many ADMA2 descriptors");
-              desc->reset();
-              desc->valid() = 1;
-              desc->act() = Adma2_desc_32::Act_tran;
-               // XXX SD spec also defines 26-bit data length mode
-              l4_uint32_t length = cxx::min(b_size, 32768U);
-              desc->length() = length;
-              desc->set_addr(_bb_phys + offset);
-              offset += length;
-              b_size -= length;
-              desc_size -= sizeof(T);
-              if (!b_size && !b->next.get())
-                desc->end() = 1;
-            }
-        }
-    }
+    adma2_set_desc_bb(desc, cmd, desc_size);
   else
-    {
-      trace2.printf("amda2_set_desc @ %08lx (direct):\n", (l4_addr_t)desc);
-      for (auto b = cmd->blocks; b; b = b->next.get())
-        {
-          l4_uint64_t b_addr = b->dma_addr;
-          l4_uint32_t b_size = b->num_sectors << 9;
-          for (; b_size; ++desc)
-            {
-              trace2.printf("  addr=%08llx size=%08x\n", b_addr, b_size);
-              if (desc_size < sizeof(T))
-                L4Re::throw_error(-L4_EINVAL, "Too many ADMA2 descriptors");
-              desc->reset();
-              desc->valid() = 1;
-              desc->act() = Adma2_desc_32::Act_tran;
-              // XXX SD spec also defines 26-bit data length mode
-              l4_uint32_t length = cxx::min(b_size, 32768U);
-              desc->length() = length;
-              if (b_addr >= T::get_max_addr())
-                L4Re::throw_error(-L4_EINVAL, "Implement 64-bit ADMA2 mode");
-              desc->set_addr(b_addr);
-              b_addr += length;
-              b_size -= length;
-              desc_size -= sizeof(T);
-              if (!b_size && !b->next.get())
-                desc->end() = 1;
-            }
-        }
-    }
+    adma2_set_desc_direct(desc, cmd, desc_size);
 }
 
 void
-Sdhci::adma2_set_desc(Cmd *cmd)
+Sdhci::adma2_set_desc(Cmd const *cmd)
 {
   if (_adma2_64)
     adma2_set_desc<Adma2_desc_64>(_adma2_desc, cmd);
