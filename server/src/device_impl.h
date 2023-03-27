@@ -361,14 +361,35 @@ Device<Driver>::inout_data(l4_uint64_t sector,
   return L4_EOK;
 }
 
+// Execute the SWITCH command to flush the device cache synchronously.
 template <class Driver>
 int
 Device<Driver>::flush(Block_device::Inout_callback const &cb)
 {
-  (void)cb;
+  info.printf("\033[32mflush\033[m\n");
 
-  warn.printf("\033[31;mflush\033\n\n");
-  return -L4_EINVAL;
+  Cmd *cmd = _drv.cmd_create();
+  if (!cmd)
+    return -L4_EBUSY;
+
+  try
+    {
+      Mmc::Reg_ecsd::Ec32_flush_cache fc(0);
+      fc.flush() = 1;
+      exec_mmc_switch(cmd, fc.index(), fc.raw);
+      cmd->check_error("CMD6: SWITCH/FLUSH_CACHE");
+      cmd->work_done();
+      cmd->destruct();
+    }
+  catch (L4::Runtime_error const &e)
+    {
+      warn.printf("flush fails: %s: %s.\n", e.str(), e.extra_str());
+      return -L4_EINVAL;
+    }
+
+  cb(L4_EOK, 0); // What to pass for 'size'?
+
+  return L4_EOK;
 }
 
 template <class Driver>

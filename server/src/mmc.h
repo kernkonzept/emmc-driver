@@ -839,7 +839,13 @@ public:
     l4_uint8_t ec29_mode_operation_codes;
     l4_uint8_t ec30_mode_config;
     l4_uint8_t ec31_barrier_ctrl;
-    l4_uint8_t ec32_flush_cache;
+    struct Ec32_flush_cache : public Reg8<Reg32_flush_cache>
+    {
+      using Reg8::Reg8;
+      CXX_BITFIELD_MEMBER(0, 0, flush, raw);
+      CXX_BITFIELD_MEMBER(1, 1, barrier, raw);
+    };
+    Ec32_flush_cache ec32_flush_cache;
     struct Ec33_cache_ctrl : public Reg8<Reg33_cache_ctrl>
     {
       using Reg8::Reg8;
