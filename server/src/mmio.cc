@@ -21,7 +21,7 @@ Mmio_space_register_block_base::do_read(l4_addr_t addr, char log2_size) const
 
 void
 Mmio_space_register_block_base::do_write(l4_uint64_t v,
-                                 l4_addr_t addr, char log2_size) const
+                                         l4_addr_t addr, char log2_size) const
 {
   if (_mmio_space->mmio_write(addr, log2_size, v) == L4_EOK)
     return;
