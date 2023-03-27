@@ -52,7 +52,8 @@ static char const *usage_str =
 "                      (MODE is hs26|hs52|hs200|hs400)\n"
 " --client CAP         Add a static client via the CAP capability\n"
 " --ds-max NUM         Specify maximum number of dataspaces the client can register\n"
-" --max-seg NUM        Specify maximum number of segments one vio request can have\n";
+" --max-seg NUM        Specify maximum number of segments one vio request can have\n"
+" --readonly           Only allow read-only access to the device\n";
 
 using Base_device_mgr = Block_device::Device_mgr<
   Emmc::Base_device,
@@ -218,24 +219,28 @@ parse_args(int argc, char *const *argv)
 
   enum
   {
+    OPT_MAX_SEG,
+
     OPT_CLIENT,
     OPT_DEVICE,
     OPT_DS_MAX,
     OPT_READONLY,
     OPT_DISABLE_MODE,
-    OPT_MAX_SEG,
   };
 
   static struct option const loptions[] =
   {
+    // global options
     { "verbose",        no_argument,            NULL,   'v' },
     { "quiet",          no_argument,            NULL,   'q' },
+    { "disable-mode",   required_argument,      NULL,   OPT_DISABLE_MODE },
+    { "max-seg",        required_argument,      NULL,   OPT_MAX_SEG },
+
+    // per-client options
     { "client",         required_argument,      NULL,   OPT_CLIENT },
     { "device",         required_argument,      NULL,   OPT_DEVICE },
     { "ds-max",         required_argument,      NULL,   OPT_DS_MAX },
     { "readonly",       no_argument,            NULL,   OPT_READONLY },
-    { "disable-mode",   required_argument,      NULL,   OPT_DISABLE_MODE },
-    { "max-seg",        required_argument,      NULL,   OPT_MAX_SEG },
     { 0,                0,                      NULL,   0, },
   };
 
@@ -281,6 +286,10 @@ parse_args(int argc, char *const *argv)
               warn.printf(usage_str, argv[0]);
             }
           break;
+        case OPT_MAX_SEG:
+          max_seg = atoi(optarg);
+          break;
+
         case OPT_CLIENT:
           if (!opts.add_client(&drv))
             return 1;
@@ -293,8 +302,8 @@ parse_args(int argc, char *const *argv)
         case OPT_DS_MAX:
           opts.ds_max = atoi(optarg);
           break;
-        case OPT_MAX_SEG:
-          max_seg = atoi(optarg);
+        case OPT_READONLY:
+          opts.readonly = true;
           break;
         default:
           warn.printf(usage_str, argv[0]);
