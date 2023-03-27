@@ -31,6 +31,17 @@ static Dbg trace(Dbg::Trace, "main");
 static Emmc::Mmc::Reg_ecsd::Ec196_device_type device_type_disable(0);
 static int max_seg = 64;
 
+// Don't specify the partition number when creating a client. The partition is
+// already specified by setting `device` to the GUID of the corresponding GPT
+// partition. To access the entire device, use the PSN (product serial number)
+// of the device.
+//
+// See Device::match_hid() for matching the whole device. This function is
+// invoked if libblock-device couldn't match the device name to any GUID.
+//
+// Specifying PSN:partition would work as well.
+enum { No_partno = -1 };
+
 static char const *usage_str =
 "Usage: %s [-vq] --client CAP --ds-max NUM]\n"
 "\n"
@@ -97,7 +108,7 @@ public:
       }
 
     L4::Cap<void> cap;
-    int ret = create_dynamic_client(device, -1, num_ds, &cap, readonly,
+    int ret = create_dynamic_client(device, No_partno, num_ds, &cap, readonly,
                                     [](Emmc::Base_device *) {});
     if (ret >= 0)
       res = L4::Ipc::make_cap(cap, L4_CAP_FPAGE_RWSD);
@@ -180,7 +191,7 @@ struct Client_opts
             return false;
           }
 
-        blk_mgr->add_static_client(cap, device, -1, ds_max, readonly,
+        blk_mgr->add_static_client(cap, device, No_partno, ds_max, readonly,
                                    [](Emmc::Base_device *) {});
       }
 

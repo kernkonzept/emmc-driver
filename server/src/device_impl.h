@@ -892,7 +892,7 @@ Device<Driver>::power_up_sd(Cmd *cmd)
       return false;
     }
 
-  warn.printf("Found SD card version 2 or later\n");
+  warn.printf("Found SD card version 2 or later.\n");
 
   Mmc::Arg_acmd41_sd_send_op a41;
   adapt_ocr(Mmc::Reg_ocr(cmd->resp[0]), &a41);
@@ -985,6 +985,10 @@ Device<Driver>::power_up_sd(Cmd *cmd)
   info.printf("product: '%s', manufactured %d/%d, mid = %02x, psn = %08x\n",
               readable_product(cid.sd.pnm()).c_str(), cid.sd.mmth(),
               cid.sd.myr(), (unsigned)cid.sd.mid(), cid.sd.psn());
+
+  // Use the PSN as identifier for the whole device. The method `match_hid()`
+  // will match for this string.
+  snprintf(_hid, sizeof(_hid), "%08x", cid.sd.psn());
 
   cmd->init_arg(Mmc::Cmd3_send_relative_addr, 0);
   cmd_exec(cmd);
@@ -1214,6 +1218,10 @@ Device<Driver>::power_up_mmc(Cmd *cmd)
   info.printf("product: '%s', manufactured %d/%d, mid = %02x, psn = %08x\n",
               readable_product(cid.mmc.pnm()).c_str(), cid.mmc.mmth(),
               cid.mmc.myr(), (unsigned)cid.mmc.mid(), cid.mmc.psn());
+
+  // Use the PSN as identifier for the whole device. The method `match_hid()`
+  // will match for this string.
+  snprintf(_hid, sizeof(_hid), "%08x", cid.mmc.psn());
 
   cmd->init_arg(Mmc::Cmd3_set_relative_addr, _rca << 16);
   cmd_exec(cmd);
