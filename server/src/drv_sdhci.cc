@@ -353,25 +353,30 @@ Sdhci::cmd_submit(Cmd *cmd)
 
       if (Dma_adma2)
         {
+          // `cmd` refers to a list of blocks (cmd->blocks != nullptr).
           if (cmd->blocks)
-            adma2_set_desc(cmd);
+            adma2_set_desc_blocks(cmd);
           else
-            adma2_set_desc(cmd->data_phys, cmd->blocksize);
+            adma2_set_desc_memory_region(cmd->data_phys, cmd->blocksize);
           dma_addr = _adma2_desc_phys;
         }
       else
         {
-          if (cmd->blocks)
+          // `cmd` refers either to a single block (cmd->blocks != nullptr) or
+          // to a region (cmd->data_phys / cmd->blocksize set).
+          l4_size_t blk_size = cmd->blocksize * cmd->blockcnt;
+          if (cmd->blocks) // this implies cmd->inout() == true
             {
-              if (using_bounce_buffer() && cmd->flags.inout())
+              if (provided_bounce_buffer()
+                  && region_requires_bounce_buffer(cmd->data_phys, blk_size))
                 {
                   if (!cmd->flags.inout_read())
                     {
-                      memcpy((void *)_bb_virt, cmd->blocks->virt_addr,
-                             cmd->blocksize * cmd->blockcnt);
-                      l4_cache_flush_data(_bb_virt, _bb_virt + cmd->blocksize
-                                                             * cmd->blockcnt);
+                      memcpy((void *)_bb_virt, cmd->blocks->virt_addr, blk_size);
+                      l4_cache_flush_data(_bb_virt, _bb_virt + blk_size);
                     }
+                  else
+                    cmd->flags.read_from_bounce_buffer() = 1;
                   dma_addr = cmd->data_phys = _bb_phys;
                 }
               else
@@ -379,8 +384,7 @@ Sdhci::cmd_submit(Cmd *cmd)
             }
           else
             dma_addr = cmd->data_phys;
-          trace2.printf("SDMA: addr=%08llx size=%08x\n",
-                        dma_addr, cmd->blocksize * cmd->blockcnt);
+          trace2.printf("SDMA: addr=%08llx size=%08zx\n", dma_addr, blk_size);
         }
 
       Reg_blk_att ba;
@@ -596,16 +600,20 @@ Sdhci::cmd_fetch_response(Cmd *cmd)
         trace.printf("\033[35mCommand response R1 (%s)\033[m\n", s.str());
     }
 
-  if (using_bounce_buffer() && (   cmd->cmd == Mmc::Cmd17_read_single_block
-                                || cmd->cmd == Mmc::Cmd18_read_multiple_block))
+  if (cmd->flags.read_from_bounce_buffer()
+      && (   cmd->cmd == Mmc::Cmd17_read_single_block
+          || cmd->cmd == Mmc::Cmd18_read_multiple_block))
     {
       l4_uint32_t offset = 0;
-      for (auto b = cmd->blocks; b; b = b->next.get())
+      for (auto const *b = cmd->blocks; b; b = b->next.get())
         {
           l4_uint32_t b_size = b->num_sectors << 9;
-          l4_cache_inv_data(_bb_virt + offset, _bb_virt + offset + b_size);
-          memcpy(b->virt_addr, (void *)(_bb_virt + offset), b_size);
-          offset += b_size;
+          if (region_requires_bounce_buffer(b->dma_addr, b_size))
+            {
+              l4_cache_inv_data(_bb_virt + offset, _bb_virt + offset + b_size);
+              memcpy(b->virt_addr, (void *)(_bb_virt + offset), b_size);
+              offset += b_size;
+            }
         }
     }
 }
@@ -845,103 +853,95 @@ Sdhci::dump() const
     warn.printf("  %04x: %08x\n", i, (unsigned)_regs[i]);
 }
 
+/**
+ * Set up ADMA2 descriptor table using the memory provided in the In/out
+ * blocks as DMA memory.
+ *
+ * Test for each block if the bounce buffer is required.
+ */
 template<typename T>
 void
-Sdhci::adma2_set_desc_bb(T *desc, Cmd const *cmd, l4_size_t desc_size)
+Sdhci::adma2_set_desc(T *desc, Cmd *cmd, l4_size_t desc_size)
 {
-  trace2.printf("amda2_set_desc @ %08lx (bounce buffer):\n", (l4_addr_t)desc);
-  l4_uint32_t offset = 0;
-  for (auto b = cmd->blocks; b; b = b->next.get())
+  trace2.printf("amda2_set_desc @ %08lx:\n", (l4_addr_t)desc);
+  l4_uint32_t bb_offs = 0;
+  for (auto const *b = cmd->blocks; b; b = b->next.get())
     {
+      l4_uint64_t b_addr = b->dma_addr;
       l4_uint32_t b_size = b->num_sectors << 9;
-      if (offset + b_size > _bb_size)
-        L4Re::throw_error(-L4_EINVAL, "Bounce buffer too small");
-      if (!cmd->flags.inout_read())
+      if (provided_bounce_buffer()
+          && region_requires_bounce_buffer(b_addr, b_size))
         {
-          memcpy((void *)(_bb_virt + offset), b->virt_addr, b_size);
-          l4_cache_flush_data(_bb_virt + offset, _bb_virt + offset + b_size);
+          if (bb_offs + b_size > _bb_size)
+            L4Re::throw_error(-L4_EINVAL, "Bounce buffer too small");
+          if (!cmd->flags.inout_read())
+            {
+              memcpy((void *)(_bb_virt + bb_offs), b->virt_addr, b_size);
+              l4_cache_flush_data(_bb_virt + bb_offs, _bb_virt + bb_offs + b_size);
+            }
+          b_addr = _bb_phys + bb_offs;
+          bb_offs += b_size;
         }
       for (; b_size; ++desc)
         {
-          trace2.printf("  addr=%08llx size=%08x\n", _bb_phys + offset, b_size);
+          trace2.printf("  addr=%08llx size=%08x\n", _bb_phys + bb_offs, b_size);
           if (desc_size < sizeof(T))
             L4Re::throw_error(-L4_EINVAL, "Too many ADMA2 descriptors");
-          desc->reset();
-          desc->valid() = 1;
-          desc->act() = Adma2_desc_32::Act_tran;
-          // XXX SD spec also defines 26-bit data length mode
-          l4_uint32_t length = cxx::min(b_size, 32768U);
-          desc->length() = length;
-          desc->set_addr(_bb_phys + offset);
-          offset += length;
-          b_size -= length;
-          desc_size -= sizeof(T);
-          if (!b_size && !b->next.get())
-            desc->end() = 1;
-        }
-    }
-}
-
-template<typename T>
-void
-Sdhci::adma2_set_desc_direct(T *desc, Cmd const *cmd, l4_size_t desc_size)
-{
-  trace2.printf("amda2_set_desc @ %08lx (direct):\n", (l4_addr_t)desc);
-  for (auto b = cmd->blocks; b; b = b->next.get())
-    {
-      l4_uint64_t b_addr = b->dma_addr;
-      for (l4_uint32_t b_size = b->num_sectors << 9; b_size; ++desc)
-        {
-          trace2.printf("  addr=%08llx size=%08x\n", b_addr, b_size);
-          if (desc_size < sizeof(T))
-            L4Re::throw_error(-L4_EINVAL, "Too many ADMA2 descriptors");
-          desc->reset();
-          desc->valid() = 1;
-          desc->act() = Adma2_desc_32::Act_tran;
-          // XXX SD spec also defines 26-bit data length mode
-          l4_uint32_t length = cxx::min(b_size, 32768U);
-          desc->length() = length;
           if (b_addr >= T::get_max_addr())
             L4Re::throw_error(-L4_EINVAL, "Implement 64-bit ADMA2 mode");
+          desc->reset();
+          desc->valid() = 1;
+          desc->act() = Adma2_desc_32::Act_tran;
+          // XXX SD spec also defines 26-bit data length mode
+          l4_uint32_t desc_length = cxx::min(b_size, 32768U);
+          desc->length() = desc_length;
           desc->set_addr(b_addr);
-          b_addr += length;
-          b_size -= length;
+          b_addr += desc_length;
+          b_size -= desc_length;
           desc_size -= sizeof(T);
           if (!b_size && !b->next.get())
             desc->end() = 1;
         }
     }
+
+  if (bb_offs > 0)                      // bounce buffer used
+    if (cmd->flags.inout_read())        // read command
+      cmd->flags.read_from_bounce_buffer() = 1;
 }
 
 /**
- * Set up a ADMA2 descriptor table.
+ * Set up an ADMA2 descriptor table for `inout_data()` requests
+ * (per descriptor format implementation).
  *
  * Each descriptor occupies 8 bytes (with 32-bit addresses) so we are able to
  * handle up to 512 blocks (using a 4K descriptor page).
  */
 template<typename T>
 void
-Sdhci::adma2_set_desc(T *desc, Cmd const *cmd)
+Sdhci::adma2_set_desc_blocks(T *desc, Cmd *cmd)
 {
-  l4_size_t desc_size = _adma2_desc_mem.size();
-  if (using_bounce_buffer() && cmd->flags.inout())
-    adma2_set_desc_bb(desc, cmd, desc_size);
-  else
-    adma2_set_desc_direct(desc, cmd, desc_size);
+  adma2_set_desc(desc, cmd, _adma2_desc_mem.size());
 }
 
+/**
+ * Set up an ADMA2 descriptor table for `inout_data()` requests.
+ */
 void
-Sdhci::adma2_set_desc(Cmd const *cmd)
+Sdhci::adma2_set_desc_blocks(Cmd *cmd)
 {
   if (_adma2_64)
-    adma2_set_desc<Adma2_desc_64>(_adma2_desc, cmd);
+    adma2_set_desc_blocks<Adma2_desc_64>(_adma2_desc, cmd);
   else
-    adma2_set_desc<Adma2_desc_32>(_adma2_desc, cmd);
+    adma2_set_desc_blocks<Adma2_desc_32>(_adma2_desc, cmd);
 }
 
+/**
+ * Set up an ADMA2 descriptor table for internal commands (for example CMD8)
+ * (per descriptor format implementation).
+ */
 template<typename T>
 void
-Sdhci::adma2_set_desc(T *desc, l4_addr_t phys, l4_uint32_t size)
+Sdhci::adma2_set_desc_memory_region(T *desc, l4_addr_t phys, l4_uint32_t size)
 {
   desc->reset();
   desc->valid() = 1;
@@ -951,13 +951,16 @@ Sdhci::adma2_set_desc(T *desc, l4_addr_t phys, l4_uint32_t size)
   desc->length() = size;
 }
 
+/**
+ * Set up an ADMA2 descriptor table for internal commands (for example CMD8).
+ */
 void
-Sdhci::adma2_set_desc(l4_addr_t phys, l4_uint32_t size)
+Sdhci::adma2_set_desc_memory_region(l4_addr_t phys, l4_uint32_t size)
 {
   if (_adma2_64)
-    adma2_set_desc<Adma2_desc_64>(_adma2_desc, phys, size);
+    adma2_set_desc_memory_region<Adma2_desc_64>(_adma2_desc, phys, size);
   else
-    adma2_set_desc<Adma2_desc_32>(_adma2_desc, phys, size);
+    adma2_set_desc_memory_region<Adma2_desc_32>(_adma2_desc, phys, size);
 }
 
 template<typename T>

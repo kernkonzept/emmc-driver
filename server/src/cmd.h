@@ -74,6 +74,8 @@ public:
     l4_uint32_t _raw = 0;
 
   public:
+    /// Bounce buffer used for this request.
+    CXX_BITFIELD_MEMBER(10, 10, read_from_bounce_buffer, _raw);
     /// The previous command was CMD55 (APP_CMD). Only for logging.
     CXX_BITFIELD_MEMBER(9, 9, app_cmd, _raw);
     /// Enable Auto CMD23 for this command during submission.

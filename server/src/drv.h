@@ -103,8 +103,16 @@ public:
     stats_wait_done();
   }
 
-  bool using_bounce_buffer() const
+  /** Return true if a bounce buffer was provided for this driver instance. */
+  bool provided_bounce_buffer() const
   { return _bb_size != 0; }
+
+  /**
+   * Return true if this DMA region requires a bounce buffer because it's
+   * located beyond 4GiB.
+   */
+  static bool region_requires_bounce_buffer(l4_addr_t dma_addr, l4_size_t size)
+  { return dma_addr + size > (1ULL << 32); }
 
   Hw_regs     _regs;                    ///< Controller MMIO registers.
   Receive_irq _receive_irq;             ///< IRQ receive function.

@@ -1064,17 +1064,15 @@ private:
 
   /** Set ADMA2 descriptors using inout() block request. */
   template<typename T>
-  void adma2_set_desc(T *desc, Cmd const *cmd);
+  void adma2_set_desc_blocks(T *desc, Cmd *cmd);
   template<typename T>
-  void adma2_set_desc_bb(T *desc, Cmd const *cmd, l4_size_t desc_size);
-  template<typename T>
-  void adma2_set_desc_direct(T *desc, Cmd const *cmd, l4_size_t desc_size);
-  void adma2_set_desc(Cmd const *cmd);
+  void adma2_set_desc(T *desc, Cmd *cmd, l4_size_t desc_size);
+  void adma2_set_desc_blocks(Cmd *cmd);
 
   /** Set ADMA2 descriptor using physical address + length (CMD8). */
   template<typename T>
-  void adma2_set_desc(T *desc, l4_addr_t phys, l4_uint32_t size);
-  void adma2_set_desc(l4_addr_t phys, l4_uint32_t size);
+  void adma2_set_desc_memory_region(T *desc, l4_addr_t phys, l4_uint32_t size);
+  void adma2_set_desc_memory_region(l4_addr_t phys, l4_uint32_t size);
 
   /** Dump ADMA2 descriptors. */
   template<typename T>
