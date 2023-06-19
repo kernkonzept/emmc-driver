@@ -884,7 +884,7 @@ Sdhci::adma2_set_desc(T *desc, Cmd *cmd, l4_size_t desc_size)
         }
       for (; b_size; ++desc)
         {
-          trace2.printf("  addr=%08llx size=%08x\n", _bb_phys + bb_offs, b_size);
+          trace2.printf("  addr=%08llx size=%08x\n", b_addr, b_size);
           if (desc_size < sizeof(T))
             L4Re::throw_error(-L4_EINVAL, "Too many ADMA2 descriptors");
           if (b_addr >= T::get_max_addr())
