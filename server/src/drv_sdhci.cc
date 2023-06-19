@@ -370,13 +370,16 @@ Sdhci::cmd_submit(Cmd *cmd)
               if (provided_bounce_buffer()
                   && region_requires_bounce_buffer(cmd->blocks->dma_addr, blk_size))
                 {
-                  if (!cmd->flags.inout_read())
+                  if (cmd->flags.inout_read())
+                    {
+                      l4_cache_inv_data(_bb_virt, _bb_virt + blk_size);
+                      cmd->flags.read_from_bounce_buffer() = 1;
+                    }
+                  else
                     {
                       memcpy((void *)_bb_virt, cmd->blocks->virt_addr, blk_size);
                       l4_cache_flush_data(_bb_virt, _bb_virt + blk_size);
                     }
-                  else
-                    cmd->flags.read_from_bounce_buffer() = 1;
                   dma_addr = cmd->data_phys = _bb_phys;
                 }
               else
