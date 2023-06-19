@@ -171,10 +171,10 @@ Device<Driver>::dma_map_all(Block_device::Mem_region *region, l4_addr_t offset,
         }
 
       auto device = cxx::Ref_ptr<Block_device::Device>(this);
-      auto dma_info
-        = cxx::make_unique<Emmc::Dma_info<Driver>>(addr, ds_size, device);
-      region->dma_info
-        = cxx::unique_ptr<Block_device::Dma_region_info>(dma_info.release());
+      auto dma_info =
+        cxx::make_unique<Emmc::Dma_info<Driver>>(addr, ds_size, device);
+      region->dma_info =
+        cxx::unique_ptr<Block_device::Dma_region_info>(dma_info.release());
     }
 
   auto *dma_info = static_cast<Dma_info<Driver> *>(region->dma_info.get());
@@ -235,10 +235,10 @@ Device<Driver>::dma_map_single(Block_device::Mem_region *region, l4_addr_t offse
 template <class Driver>
 int
 Device<Driver>::dma_map(Block_device::Mem_region *region, l4_addr_t offset,
-                l4_size_t num_sectors, L4Re::Dma_space::Direction dir,
-                L4Re::Dma_space::Dma_addr *phys)
+                        l4_size_t num_sectors, L4Re::Dma_space::Direction dir,
+                        L4Re::Dma_space::Dma_addr *phys)
 {
-  if (Dma_map_all)
+  if (_dma_map_all)
     return dma_map_all(region, offset, num_sectors, dir, phys);
   else
     return dma_map_single(region, offset, num_sectors, dir, phys);
@@ -266,7 +266,8 @@ Device<Driver>::dma_unmap_all(L4Re::Dma_space::Dma_addr, l4_size_t,
 
 template <class Driver>
 int
-Device<Driver>::dma_unmap_single(L4Re::Dma_space::Dma_addr phys, l4_size_t num_sectors,
+Device<Driver>::dma_unmap_single(L4Re::Dma_space::Dma_addr phys,
+                                 l4_size_t num_sectors,
                                  L4Re::Dma_space::Direction dir)
 {
   if (Dma_map_workaround)
@@ -311,13 +312,14 @@ Device<Driver>::dma_unmap_single(L4Re::Dma_space::Dma_addr phys, l4_size_t num_s
 template <class Driver>
 int
 Device<Driver>::dma_unmap(L4Re::Dma_space::Dma_addr phys, l4_size_t num_sectors,
-                  L4Re::Dma_space::Direction dir)
+                          L4Re::Dma_space::Direction dir)
 {
-  if (Dma_map_all)
+  if (_dma_map_all)
     return dma_unmap_all(phys, num_sectors, dir);
   else
     return dma_unmap_single(phys, num_sectors, dir);
 }
+
 
 template <class Driver>
 int

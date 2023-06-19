@@ -53,11 +53,34 @@ static char const *usage_str =
 " --client CAP         Add a static client via the CAP capability\n"
 " --ds-max NUM         Specify maximum number of dataspaces the client can register\n"
 " --max-seg NUM        Specify maximum number of segments one vio request can have\n"
-" --readonly           Only allow read-only access to the device\n";
+" --readonly           Only allow read-only access to the device\n"
+" --dma-map-all        Map the entire client dataspace permanently\n";
 
-using Base_device_mgr = Block_device::Device_mgr<
-  Emmc::Base_device,
-  Block_device::Partitionable_factory<Emmc::Base_device>>;
+using Emmc_client_type = Block_device::Virtio_client<Emmc::Base_device>;
+
+struct Emmc_device_factory
+{
+  using Device_type = Emmc::Base_device;
+  using Client_type = Emmc_client_type;
+  using Part_device = Emmc::Part_device;
+
+  static cxx::unique_ptr<Client_type>
+  create_client(cxx::Ref_ptr<Device_type> const &dev, unsigned numds,
+                bool readonly)
+  {
+    return cxx::make_unique<Client_type>(dev, numds, readonly);
+  }
+
+  static cxx::Ref_ptr<Device_type>
+  create_partition(cxx::Ref_ptr<Device_type> const &dev, unsigned partition_id,
+                   Block_device::Partition_info const &pi)
+  {
+    return cxx::Ref_ptr<Device_type>(new Part_device(dev, partition_id, pi));
+  }
+};
+
+using Base_device_mgr = Block_device::Device_mgr<Emmc::Base_device,
+                                                 Emmc_device_factory>;
 
 class Blk_mgr
 : public Base_device_mgr,
@@ -93,6 +116,7 @@ public:
     std::string device;
     int num_ds = 2;
     bool readonly = false;
+    bool dma_map_all = false;
 
     for (L4::Ipc::Varg p: valist)
       {
@@ -116,6 +140,8 @@ public:
           }
         if (strncmp(p.value<char const *>(), "read-only", p.length()) == 0)
           readonly = true;
+        if (strncmp(p.value<char const *>(), "dma-map-all", p.length()) == 0)
+          dma_map_all = true;
       }
 
     if (device.empty())
@@ -126,7 +152,17 @@ public:
 
     L4::Cap<void> cap;
     int ret = create_dynamic_client(device, No_partno, num_ds, &cap, readonly,
-                                    [](Emmc::Base_device *) {});
+                                    [dma_map_all, device](Emmc::Base_device *b)
+      {
+        Dbg(Dbg::Warn).printf("%s for device '%s'.\033[m\n",
+                              dma_map_all ? "\033[31;1mDMA-map-all enabled"
+                                          : "\033[32mDMA-map-all disabled",
+                              device.c_str());
+        if (auto *pd = dynamic_cast<Emmc::Part_device *>(b))
+          pd->set_dma_map_all(dma_map_all);
+        else
+          b->set_dma_map_all(dma_map_all);
+      });
     if (ret >= 0)
       {
         res = L4::Ipc::make_cap(cap, L4_CAP_FPAGE_RWSD);
@@ -213,7 +249,17 @@ struct Client_opts
           }
 
         blk_mgr->add_static_client(cap, device, No_partno, ds_max, readonly,
-                                   [](Emmc::Base_device *) {});
+                                   [this](Emmc::Base_device *b)
+         {
+           Dbg(Dbg::Warn).printf("%s for device '%s'\033[m\n",
+                                 dma_map_all ? "\033[31;1mDMA-map-all enabled"
+                                             : "\033[32mDMA-map-all disabled",
+                                 device);
+           if (auto *pd = dynamic_cast<Emmc::Part_device *>(b))
+             pd->set_dma_map_all(dma_map_all);
+           else
+             b->set_dma_map_all(dma_map_all);
+         });
       }
 
     return true;
@@ -223,6 +269,7 @@ struct Client_opts
   const char *device = nullptr;
   int ds_max = 2;
   bool readonly = false;
+  bool dma_map_all = false;
 };
 
 static Block_device::Errand::Errand_server server;
@@ -245,6 +292,7 @@ parse_args(int argc, char *const *argv)
     OPT_DEVICE,
     OPT_DS_MAX,
     OPT_READONLY,
+    OPT_DMA_MAP_ALL,
     OPT_DISABLE_MODE,
   };
 
@@ -261,6 +309,7 @@ parse_args(int argc, char *const *argv)
     { "device",         required_argument,      NULL,   OPT_DEVICE },
     { "ds-max",         required_argument,      NULL,   OPT_DS_MAX },
     { "readonly",       no_argument,            NULL,   OPT_READONLY },
+    { "dma-map-all",    no_argument,            NULL,   OPT_DMA_MAP_ALL },
     { 0,                0,                      NULL,   0, },
   };
 
@@ -324,6 +373,9 @@ parse_args(int argc, char *const *argv)
           break;
         case OPT_READONLY:
           opts.readonly = true;
+          break;
+        case OPT_DMA_MAP_ALL:
+          opts.dma_map_all = true;
           break;
         default:
           warn.printf(usage_str, argv[0]);

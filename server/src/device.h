@@ -31,18 +31,73 @@ struct Dma_info;
 class Base_device
 : public Block_device::Device,
   public Block_device::Device_discard_feature
-{};
+{
+public:
+  void set_dma_map_all(bool enable)
+  { _dma_map_all = enable; }
+
+  bool _dma_map_all = false;
+};
+
+class Base_parent_device: public Base_device
+{
+public:
+  virtual int dma_map_all(Block_device::Mem_region *, l4_addr_t, l4_size_t,
+                          L4Re::Dma_space::Direction,
+                          L4Re::Dma_space::Dma_addr *) = 0;
+
+  virtual int dma_map_single(Block_device::Mem_region *, l4_addr_t, l4_size_t,
+                             L4Re::Dma_space::Direction,
+                             L4Re::Dma_space::Dma_addr *) = 0;
+
+  virtual int dma_unmap_all(L4Re::Dma_space::Dma_addr, l4_size_t,
+                            L4Re::Dma_space::Direction) = 0;
+
+  virtual int dma_unmap_single(L4Re::Dma_space::Dma_addr, l4_size_t,
+                               L4Re::Dma_space::Direction) = 0;
+};
+
+using Base_part_device = Block_device::Partitioned_device<Emmc::Base_device>;
+
+class Part_device : public Base_part_device
+{
+public:
+  using Base_part_device::Base_part_device;
+
+private:
+  int dma_map(Block_device::Mem_region *region, l4_addr_t offset,
+              l4_size_t num_sectors, L4Re::Dma_space::Direction dir,
+              L4Re::Dma_space::Dma_addr *phys) override
+  {
+    if (_dma_map_all)
+      return static_cast<Base_parent_device *>(parent())->dma_map_all(
+        region, offset, num_sectors, dir, phys);
+    else
+      return static_cast<Base_parent_device *>(parent())->dma_map_single(
+        region, offset, num_sectors, dir, phys);
+  }
+
+  int dma_unmap(L4Re::Dma_space::Dma_addr phys, l4_size_t num_sectors,
+                L4Re::Dma_space::Direction dir) override
+  {
+    if (_dma_map_all)
+      return static_cast<Base_parent_device *>(parent())->dma_unmap_all(
+        phys, num_sectors, dir);
+    else
+      return static_cast<Base_parent_device *>(parent())->dma_unmap_single(
+        phys, num_sectors, dir);
+  }
+};
 
 template <class Driver>
 class Device
-: public Block_device::Device_with_request_queue<Base_device>,
+: public Block_device::Device_with_request_queue<Base_parent_device>,
   public L4::Irqep_t<Device<Driver>>
 {
 public:
   enum
   {
     Dma_map_workaround = true,  ///< See #CD-202!
-    Dma_map_all = false,
     Sector_size = 512U,
     Hid_max_length = 36,
     Voltage_delay_ms = 10,      ///< Delay after changing voltage [us]
@@ -128,21 +183,21 @@ private:
 
   int dma_map_all(Block_device::Mem_region *region, l4_addr_t offset,
               l4_size_t num_sectors, L4Re::Dma_space::Direction dir,
-              L4Re::Dma_space::Dma_addr *phys);
+              L4Re::Dma_space::Dma_addr *phys) override;
 
   int dma_map_single(Block_device::Mem_region *region, l4_addr_t offset,
               l4_size_t num_sectors, L4Re::Dma_space::Direction dir,
-              L4Re::Dma_space::Dma_addr *phys);
+              L4Re::Dma_space::Dma_addr *phys) override;
 
   int dma_map(Block_device::Mem_region *region, l4_addr_t offset,
               l4_size_t num_sectors, L4Re::Dma_space::Direction dir,
               L4Re::Dma_space::Dma_addr *phys) override;
 
   int dma_unmap_all(L4Re::Dma_space::Dma_addr phys, l4_size_t num_sectors,
-                L4Re::Dma_space::Direction dir);
+                L4Re::Dma_space::Direction dir) override;
 
   int dma_unmap_single(L4Re::Dma_space::Dma_addr phys, l4_size_t num_sectors,
-                L4Re::Dma_space::Direction dir);
+                L4Re::Dma_space::Direction dir) override;
 
   int dma_unmap(L4Re::Dma_space::Dma_addr phys, l4_size_t num_sectors,
                 L4Re::Dma_space::Direction dir) override;
