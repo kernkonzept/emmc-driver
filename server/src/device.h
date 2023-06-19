@@ -25,6 +25,9 @@ namespace Errand = Block_device::Errand;
 
 namespace Emmc {
 
+template <class Driver>
+struct Dma_info;
+
 class Base_device
 : public Block_device::Device,
   public Block_device::Device_discard_feature
@@ -65,6 +68,8 @@ public:
          Mmc::Reg_ecsd::Ec196_device_type dt_disable);
 
   void handle_irq();
+
+  void dma_unmap_region(Dma_info<Driver> *dma_info);
 
 private:
   bool is_read_only() const override
@@ -280,9 +285,27 @@ private:
   typedef std::map<l4_addr_t, Phys_entry> Offs_entry;
   std::map<l4_cap_idx_t, Offs_entry> _ds_offs_map;
   std::map<L4Re::Dma_space::Dma_addr, Ds_offs_entry> _phys_map;
-  std::map<l4_cap_idx_t, L4Re::Dma_space::Dma_addr> _ds_map;
   //
   // ::::::::::::::::::::::::::
+};
+
+template <class Driver>
+struct Dma_info : public Block_device::Dma_region_info
+{
+  L4Re::Dma_space::Dma_addr addr;
+  l4_size_t size;
+  cxx::Ref_ptr<Block_device::Device> device;
+
+  Dma_info() = delete;
+  explicit Dma_info(L4Re::Dma_space::Dma_addr addr, l4_size_t size,
+                    cxx::Ref_ptr<Block_device::Device> device)
+  : addr(addr), size(size), device(device)
+  {}
+
+  virtual ~Dma_info() override
+  {
+    static_cast<Emmc::Device<Driver> *>(device.get())->dma_unmap_region(this);
+  }
 };
 
 } // namespace Emmc

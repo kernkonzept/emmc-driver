@@ -152,18 +152,16 @@ Device<Driver>::reset()
 template <class Driver>
 int
 Device<Driver>::dma_map_all(Block_device::Mem_region *region, l4_addr_t offset,
-                            l4_size_t num_sectors, L4Re::Dma_space::Direction dir,
+                            l4_size_t num_sectors, L4Re::Dma_space::Direction,
                             L4Re::Dma_space::Dma_addr *phys)
 {
-  L4Re::Dma_space::Dma_addr p = 0;
-  l4_size_t ds_size = region->ds()->size();
-
-  auto addr = _ds_map.find(region->ds().cap());
-  if (addr == _ds_map.end())
+  if (!region->dma_info)
     {
+      l4_size_t ds_size = region->ds()->size();
+      L4Re::Dma_space::Dma_addr addr;
       auto ret = _dma->map(L4::Ipc::make_cap_rw(region->ds()), 0,
                            &ds_size, L4Re::Dma_space::Attributes::None,
-                           dir, &p);
+                           L4Re::Dma_space::Direction::Bidirectional, &addr);
       if (ret < 0 || ds_size < num_sectors * sector_size())
         {
           *phys = 0;
@@ -171,13 +169,16 @@ Device<Driver>::dma_map_all(Block_device::Mem_region *region, l4_addr_t offset,
                       ret, ds_size, num_sectors * sector_size());
           return -L4_ENOMEM;
         }
-      _ds_map.insert(std::make_pair(region->ds().cap(), p));
+
+      auto device = cxx::Ref_ptr<Block_device::Device>(this);
+      auto dma_info
+        = cxx::make_unique<Emmc::Dma_info<Driver>>(addr, ds_size, device);
+      region->dma_info
+        = cxx::unique_ptr<Block_device::Dma_region_info>(dma_info.release());
     }
-  else
-    p = addr->second;
 
-  *phys = p + offset;
-
+  auto *dma_info = static_cast<Dma_info<Driver> *>(region->dma_info.get());
+  *phys = dma_info->addr + offset - region->ds_offset();
   return L4_EOK;
 }
 
@@ -241,6 +242,18 @@ Device<Driver>::dma_map(Block_device::Mem_region *region, l4_addr_t offset,
     return dma_map_all(region, offset, num_sectors, dir, phys);
   else
     return dma_map_single(region, offset, num_sectors, dir, phys);
+}
+
+template <class Driver>
+void
+Device<Driver>::dma_unmap_region(Dma_info<Driver> *dma_info)
+{
+  auto ret = _dma->unmap(dma_info->addr, dma_info->size,
+                         L4Re::Dma_space::Attributes::None,
+                         L4Re::Dma_space::Direction::Bidirectional);
+  if (ret < 0)
+    Dbg::info().printf("Failed to unmap (ret = %ld, addr = %llx, size = %zu)\n",
+                       ret, dma_info->addr, dma_info->size);
 }
 
 template <class Driver>
