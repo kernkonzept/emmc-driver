@@ -863,7 +863,7 @@ template<typename T>
 void
 Sdhci::adma2_set_desc(T *desc, Cmd *cmd, l4_size_t desc_size)
 {
-  trace2.printf("amda2_set_desc @ %08lx:\n", (l4_addr_t)desc);
+  trace2.printf("adma2_set_desc @ %08lx:\n", (l4_addr_t)desc);
   l4_uint32_t bb_offs = 0;
   for (auto const *b = cmd->blocks; b; b = b->next.get())
     {

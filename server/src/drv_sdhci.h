@@ -614,7 +614,7 @@ private:
            + std::string(", sr:") + std::to_string(srs())
            + std::string(", dma:") + std::to_string(dmas())
            + std::string(", hs:") + std::to_string(hss())
-           + std::string(", amda:") + std::to_string(admas())
+           + std::string(", adma:") + std::to_string(admas())
            + std::string(", mbl:") + std::to_string(512 << mbl())
            + std::string(", tune:") + std::to_string(retuning_mode())
            + std::string(", ddr50:") + std::to_string(ddr50_support())
