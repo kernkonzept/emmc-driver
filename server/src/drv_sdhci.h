@@ -1062,22 +1062,23 @@ private:
   /** Required for HS400. */
   void set_strobe_dll();
 
+  /** Set ADMA2 descriptors for a single memory region. */
+  template<typename T>
+  T* adma2_set_descs_mem_region(T *desc, l4_uint64_t b_addr,
+                                l4_uint32_t b_size, bool terminate = true);
+
   /** Set ADMA2 descriptors using inout() block request. */
   template<typename T>
-  void adma2_set_desc_blocks(T *desc, Cmd *cmd);
-  template<typename T>
-  void adma2_set_desc(T *desc, Cmd *cmd, l4_size_t desc_size);
-  void adma2_set_desc_blocks(Cmd *cmd);
+  void adma2_set_descs(T *descs, Cmd *cmd);
+  void adma2_set_descs_blocks(Cmd *cmd);
 
   /** Set ADMA2 descriptor using physical address + length (CMD8). */
-  template<typename T>
-  void adma2_set_desc_memory_region(T *desc, l4_addr_t phys, l4_uint32_t size);
-  void adma2_set_desc_memory_region(l4_addr_t phys, l4_uint32_t size);
+  void adma2_set_descs_memory_region(l4_addr_t phys, l4_uint32_t size);
 
   /** Dump ADMA2 descriptors. */
   template<typename T>
-  void adma2_dump_desc(T const *desc) const;
-  void adma2_dump_desc() const;
+  void adma2_dump_descs(T const *desc) const;
+  void adma2_dump_descs() const;
 
   Inout_buffer _adma2_desc_mem;         ///< Dataspace for descriptor memory.
   L4Re::Dma_space::Dma_addr _adma2_desc_phys; ///< Physical address of ADMA2 descs.

@@ -355,9 +355,9 @@ Sdhci::cmd_submit(Cmd *cmd)
         {
           // `cmd` refers to a list of blocks (cmd->blocks != nullptr).
           if (cmd->blocks)
-            adma2_set_desc_blocks(cmd);
+            adma2_set_descs_blocks(cmd);
           else
-            adma2_set_desc_memory_region(cmd->data_phys, cmd->blocksize);
+            adma2_set_descs_memory_region(cmd->data_phys, cmd->blocksize);
           dma_addr = _adma2_desc_phys;
         }
       else
@@ -854,17 +854,60 @@ Sdhci::dump() const
 }
 
 /**
- * Set up ADMA2 descriptor table using the memory provided in the In/out
- * blocks as DMA memory.
+ * Set up one or more ADMA2 descriptors for a single memory block (either
+ * client memory or bounce buffer).
+ *
+ * \param desc       First descriptor to be written.
+ * \param phys       Physical address of memory region for DMA.
+ * \param size       Size of the memory region for DMA.
+ * \param terminate  True for writing the final descriptor.
+ * \return Pointer to the next descriptor.
+ *
+ * \note The descriptor memory is mapped uncached so cache flush not required!
+ */
+template<typename T>
+T*
+Sdhci::adma2_set_descs_mem_region(T *desc, l4_uint64_t phys, l4_uint32_t size,
+                                  bool terminate)
+{
+  for (; size; ++desc)
+    {
+      trace2.printf("  addr=%08llx size=%08x\n", phys, size);
+      if (desc > _adma2_desc + _adma2_desc_mem.size() / sizeof(T) - 1)
+        L4Re::throw_error(-L4_EINVAL, "Too many ADMA2 descriptors");
+      if (phys >= T::get_max_addr())
+        L4Re::throw_error(-L4_EINVAL, "Implement 64-bit ADMA2 mode");
+      desc->reset();
+      desc->valid() = 1;
+      desc->act() = Adma2_desc_32::Act_tran;
+      // XXX SD spec also defines 26-bit data length mode
+      l4_uint32_t desc_length = cxx::min(size, 32768U);
+      desc->length() = desc_length;
+      desc->set_addr(phys);
+      phys += desc_length;
+      size -= desc_length;
+      if (!size && terminate)
+        desc->end() = 1;
+    }
+
+  return desc;
+}
+
+/**
+ * Set up ADMA2 descriptor table using the memory provided in the In/out blocks
+ * as DMA memory.
  *
  * Test for each block if the bounce buffer is required.
  */
 template<typename T>
 void
-Sdhci::adma2_set_desc(T *desc, Cmd *cmd, l4_size_t desc_size)
+Sdhci::adma2_set_descs(T *descs, Cmd *cmd)
 {
-  trace2.printf("adma2_set_desc @ %08lx:\n", (l4_addr_t)desc);
+  trace2.printf("adma2_set_descs @ %08lx:\n", (l4_addr_t)descs);
+
   l4_uint32_t bb_offs = 0;
+  auto *d = descs;
+
   for (auto const *b = cmd->blocks; b; b = b->next.get())
     {
       l4_uint64_t b_addr = b->dma_addr;
@@ -882,26 +925,8 @@ Sdhci::adma2_set_desc(T *desc, Cmd *cmd, l4_size_t desc_size)
           b_addr = _bb_phys + bb_offs;
           bb_offs += b_size;
         }
-      for (; b_size; ++desc)
-        {
-          trace2.printf("  addr=%08llx size=%08x\n", b_addr, b_size);
-          if (desc_size < sizeof(T))
-            L4Re::throw_error(-L4_EINVAL, "Too many ADMA2 descriptors");
-          if (b_addr >= T::get_max_addr())
-            L4Re::throw_error(-L4_EINVAL, "Implement 64-bit ADMA2 mode");
-          desc->reset();
-          desc->valid() = 1;
-          desc->act() = Adma2_desc_32::Act_tran;
-          // XXX SD spec also defines 26-bit data length mode
-          l4_uint32_t desc_length = cxx::min(b_size, 32768U);
-          desc->length() = desc_length;
-          desc->set_addr(b_addr);
-          b_addr += desc_length;
-          b_size -= desc_length;
-          desc_size -= sizeof(T);
-          if (!b_size && !b->next.get())
-            desc->end() = 1;
-        }
+
+      d = adma2_set_descs_mem_region(d, b_addr, b_size, !b->next.get());
     }
 
   if (bb_offs > 0)                      // bounce buffer used
@@ -910,62 +935,35 @@ Sdhci::adma2_set_desc(T *desc, Cmd *cmd, l4_size_t desc_size)
 }
 
 /**
- * Set up an ADMA2 descriptor table for `inout_data()` requests
- * (per descriptor format implementation).
+ * Set up an ADMA2 descriptor table for `inout_data()` requests.
  *
  * Each descriptor occupies 8 bytes (with 32-bit addresses) so we are able to
  * handle up to 512 blocks (using a 4K descriptor page).
  */
-template<typename T>
 void
-Sdhci::adma2_set_desc_blocks(T *desc, Cmd *cmd)
-{
-  adma2_set_desc(desc, cmd, _adma2_desc_mem.size());
-}
-
-/**
- * Set up an ADMA2 descriptor table for `inout_data()` requests.
- */
-void
-Sdhci::adma2_set_desc_blocks(Cmd *cmd)
+Sdhci::adma2_set_descs_blocks(Cmd *cmd)
 {
   if (_adma2_64)
-    adma2_set_desc_blocks<Adma2_desc_64>(_adma2_desc, cmd);
+    adma2_set_descs<Adma2_desc_64>(_adma2_desc, cmd);
   else
-    adma2_set_desc_blocks<Adma2_desc_32>(_adma2_desc, cmd);
-}
-
-/**
- * Set up an ADMA2 descriptor table for internal commands (for example CMD8)
- * (per descriptor format implementation).
- */
-template<typename T>
-void
-Sdhci::adma2_set_desc_memory_region(T *desc, l4_addr_t phys, l4_uint32_t size)
-{
-  desc->reset();
-  desc->valid() = 1;
-  desc->end() = 1;
-  desc->act() = Adma2_desc_32::Act_tran;
-  desc->set_addr(phys);
-  desc->length() = size;
+    adma2_set_descs<Adma2_desc_32>(_adma2_desc, cmd);
 }
 
 /**
  * Set up an ADMA2 descriptor table for internal commands (for example CMD8).
  */
 void
-Sdhci::adma2_set_desc_memory_region(l4_addr_t phys, l4_uint32_t size)
+Sdhci::adma2_set_descs_memory_region(l4_addr_t phys, l4_uint32_t size)
 {
   if (_adma2_64)
-    adma2_set_desc_memory_region<Adma2_desc_64>(_adma2_desc, phys, size);
+    adma2_set_descs_mem_region<Adma2_desc_64>(_adma2_desc, phys, size);
   else
-    adma2_set_desc_memory_region<Adma2_desc_32>(_adma2_desc, phys, size);
+    adma2_set_descs_mem_region<Adma2_desc_64>(_adma2_desc, phys, size);
 }
 
 template<typename T>
 void
-Sdhci::adma2_dump_desc(T const *desc) const
+Sdhci::adma2_dump_descs(T const *desc) const
 {
   for (;; ++desc)
     {
@@ -979,14 +977,14 @@ Sdhci::adma2_dump_desc(T const *desc) const
 }
 
 void
-Sdhci::adma2_dump_desc() const
+Sdhci::adma2_dump_descs() const
 {
   trace.printf("ADMA descriptors (%d-bit) at phys=%08llx / virt=%08lx\n",
                _adma2_64 ? 64 : 32, _adma2_desc_phys, (l4_addr_t)_adma2_desc);
   if (_adma2_64)
-    adma2_dump_desc<Adma2_desc_64>(_adma2_desc);
+    adma2_dump_descs<Adma2_desc_64>(_adma2_desc);
   else
-    adma2_dump_desc<Adma2_desc_32>(_adma2_desc);
+    adma2_dump_descs<Adma2_desc_32>(_adma2_desc);
 }
 
 } // namespace Emmc
