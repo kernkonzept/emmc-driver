@@ -1336,10 +1336,12 @@ Device<Driver>::power_up_mmc(Cmd *cmd)
   exec_mmc_switch(cmd, hm.index(), hm.raw);
   cmd->check_error("CMD6: SWITCH/HPI_MGMT");
 
-  l4_uint64_t cache_size_kb = ((l4_uint32_t)_ecsd.ec249_cache_size[0])
-                            + ((l4_uint32_t)_ecsd.ec249_cache_size[1] << 8)
-                            + ((l4_uint32_t)_ecsd.ec249_cache_size[2] << 16)
-                            + ((l4_uint32_t)_ecsd.ec249_cache_size[3] << 24);
+  // Prevent gcc from generating an unaligned 32-bit access to uncached memory!
+  l4_uint64_t cache_size_kb
+    = ((l4_uint32_t)((l4_uint8_t volatile*)_ecsd.ec249_cache_size)[0])
+    + ((l4_uint32_t)((l4_uint8_t volatile*)_ecsd.ec249_cache_size)[1] << 8)
+    + ((l4_uint32_t)((l4_uint8_t volatile*)_ecsd.ec249_cache_size)[2] << 16)
+    + ((l4_uint32_t)((l4_uint8_t volatile*)_ecsd.ec249_cache_size)[3] << 24);
   if (cache_size_kb)
     {
       info.printf("Device has %s cache -- enabling.\n",
