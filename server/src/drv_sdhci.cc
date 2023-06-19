@@ -368,7 +368,7 @@ Sdhci::cmd_submit(Cmd *cmd)
           if (cmd->blocks) // this implies cmd->inout() == true
             {
               if (provided_bounce_buffer()
-                  && region_requires_bounce_buffer(cmd->data_phys, blk_size))
+                  && region_requires_bounce_buffer(cmd->blocks->dma_addr, blk_size))
                 {
                   if (!cmd->flags.inout_read())
                     {
