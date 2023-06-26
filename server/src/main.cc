@@ -43,11 +43,11 @@ static int max_seg = 64;
 enum { No_partno = -1 };
 
 static char const *usage_str =
-"Usage: %s [-vq] --client CAP --ds-max NUM]\n"
+"Usage: %s [-vq] --client CAP <client parameters>]\n"
 "\n"
 "Options:\n"
-" -v   Verbose mode\n"
-" -q   Quiet mode\n"
+" -v                   Verbose mode\n"
+" -q                   Be quiet\n"
 " --disable-mode MODE  Disable a certain eMMC mode (can be used more than once\n"
 "                      (MODE is hs26|hs52|hs200|hs400)\n"
 " --client CAP         Add a static client via the CAP capability\n"
@@ -138,7 +138,7 @@ public:
               }
             continue;
           }
-        if (strncmp(p.value<char const *>(), "read-only", p.length()) == 0)
+        if (strncmp(p.value<char const *>(), "readonly", p.length()) == 0)
           readonly = true;
         if (strncmp(p.value<char const *>(), "dma-map-all", p.length()) == 0)
           dma_map_all = true;
@@ -318,7 +318,15 @@ parse_args(int argc, char *const *argv)
     {
       int opt = getopt_long(argc, argv, "vq", loptions, NULL);
       if (opt == -1)
-        break;
+        {
+          if (optind < argc)
+            {
+              warn.printf("Unknown parameter '%s'\n", argv[optind]);
+              warn.printf(usage_str, argv[0]);
+              return -1;
+            }
+          break;
+        }
 
       switch (opt)
         {

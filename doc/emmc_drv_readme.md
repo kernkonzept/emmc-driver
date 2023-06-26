@@ -39,11 +39,16 @@ command line options:
 
   This option enables the quiet mode. All output is silenced.
 
+* `--disable-mode <mode>`
+
+  This option allows to disable certain eMMC modes from autodetection. The
+  modes `hs26`, `hs52`, `hs52_ddr`, `hs200`, and `hs400` are determined.
+
 * `--client <cap_name>`
 
   This option starts a new static client option context. The following
-  `device`, `ds-max` and `readonly` options belong to this context until a new
-  client option context is created.
+  `device`, `ds-max`, `readonly` and `dma-map-all` options belong to this
+  context until a new client option context is created.
 
   The option parameter is the name of a local IPC gate capability with server
   rights.
@@ -63,10 +68,12 @@ command line options:
   This option sets the access to disks or partitions to read only for the
   preceding `client` option.
 
-* `--disable-mode <mode>`
+* `--dma-map-all`
 
-  This option allows to disable certain eMMC modes from autodetection. The
-  modes `hs26`, `hs52`, `hs52_ddr`, `hs200`, and `hs400` are determined.
+  Map the entire client dataspace into the DMA space at the first I/O request
+  and never unmap the dataspace until the client is destroyed. The default
+  behavior is to map the relevant part of the dataspace before an I/O request
+  and unmap it after the request.
 
 
 ## Connecting a client
@@ -92,6 +99,18 @@ IPC gate capability whose server side is bound to the eMMC driver.
 
   Specifies the upper limit of the number of dataspaces the client is allowed
   to register with the eMMC driver for virtio DMA.
+
+* `"readonly"`
+
+  This option sets the access to disks or partitions to read only for this
+  client connection.
+
+* `"dma-map-all"`
+
+  Map the entire client dataspace into the DMA space at the first I/O request
+  and never unmap the dataspace until the client is destroyed. The default
+  behavior is to map the relevant part of the dataspace before an I/O request
+  and unmap it after the request.
 
 If the `create()` call is successful a new capability which references an eMMC
 virtio driver is returned. A client uses this capability to communicate with
