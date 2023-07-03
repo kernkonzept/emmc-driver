@@ -295,7 +295,7 @@ Sdhci::cmd_wait_available(Cmd const *cmd, bool sleep)
       trace.printf("cmd_wait_available: ps = %08x, is = %08x\n",
                    ps.raw, Reg_int_status(_regs).raw);
       if (sleep)
-        l4_sleep(1);
+        l4_ipc_sleep_ms(1);
     }
   time = Util::read_tsc() - time;
   _time_sleep += time;

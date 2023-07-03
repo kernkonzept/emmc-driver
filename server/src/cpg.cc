@@ -83,7 +83,7 @@ Rcar3_cpg::enable_clock(unsigned n, unsigned bit)
     {
       if (!(_regs[mstpsr[n]] & mask))
         return L4_EOK;
-      l4_sleep(5);
+      l4_ipc_sleep_ms(5);
     }
 
   // Device not there or doesn't work.

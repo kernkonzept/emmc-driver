@@ -5,7 +5,6 @@
  *            Jakub Jermar <jakub.jermar@kernkonzept.com>
  */
 
-#include <l4/util/util.h>
 #include <l4/re/mmio_space>
 #include <l4/sys/kip.h>
 
@@ -547,7 +546,7 @@ Device<Driver>::receive_irq(bool is_data) const
   struct Timeout
   {
     Timeout(l4_uint32_t timeout)
-    { l4_rcv_timeout(l4util_micros2l4to(timeout), &_timeout); }
+    { l4_rcv_timeout(l4_timeout_from_us(timeout), &_timeout); }
     l4_timeout_t timeout() const { return _timeout; }
     l4_timeout_t _timeout = L4_IPC_NEVER_INITIALIZER;
   };

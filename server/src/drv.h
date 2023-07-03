@@ -10,7 +10,6 @@
 
 #include <l4/drivers/hw_mmio_register_block>
 #include <l4/re/mmio_space>
-#include <l4/util/util.h>
 
 #include "cmd.h"
 #include "mmc.h"
@@ -99,7 +98,7 @@ public:
   void delay(unsigned ms)
   {
     stats_wait_start();
-    l4_sleep(ms);
+    l4_ipc_sleep_ms(ms);
     stats_wait_done();
   }
 
