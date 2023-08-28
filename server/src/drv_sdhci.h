@@ -142,7 +142,7 @@ private:
     explicit Reg() : raw(0) {}
     explicit Reg(Hw_regs const &regs) : raw(regs[offs]) {}
     explicit Reg(l4_uint32_t v) : raw(v) {}
-    l4_uint32_t read(Hw_regs &regs) { raw = regs[offs]; return raw; }
+    l4_uint32_t read(Hw_regs const &regs) { raw = regs[offs]; return raw; }
     void write(Hw_regs &regs) { regs[offs] = raw; }
     l4_uint32_t raw;
   };
