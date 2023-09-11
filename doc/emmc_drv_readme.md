@@ -1,6 +1,7 @@
-# eMMC driver (#l4re_servers_emmc_driver}
+# eMMC driver {#l4re_servers_emmc_driver}
 
 The eMMC driver is a driver for PCI Express eMMC controllers.
+
 
 ## Starting the service
 
@@ -23,6 +24,17 @@ See the sector below on how to configure access to a disk or partition.
 The eMMC driver needs access to a virtual bus capability (`vbus`). On the
 virtual bus the eMMC driver searches for eMMC compliant storage controllers.
 Please see io's documentation about how to setup a virtual bus.
+
+
+### Supported devices
+
+The eMMC driver supports SDHCI and SDHI controllers, in particular
+- SDHI interfaces found on RCar3 r8a7795 boards
+- uSDHCI interfaces found on i.MX8 boards
+- the QEMU SD card emulation (see `doc/pcie-ecam.io`),
+- the QEMU eMMC emulation (provided by extending the QEMU SD card emulation by
+  `doc/qemu-patch.diff`).
+
 
 ### Options
 
