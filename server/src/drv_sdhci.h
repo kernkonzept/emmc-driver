@@ -242,7 +242,9 @@ private:
     CXX_BITFIELD_MEMBER(24, 24, d0lsl, raw); ///< DATA0 line signal level
     CXX_BITFIELD_MEMBER(24, 31, dlsl, raw);  ///< DATA{7:0] line signal level
     // <<< uSDHC
-    CXX_BITFIELD_MEMBER(23, 23, clsl, raw);  ///< CMD line signal level
+    CXX_BITFIELD_MEMBER(24, 24, clsl, raw);  ///< CMD line signal level
+    CXX_BITFIELD_MEMBER(20, 23, datlsl, raw);  ///< DAT line signal level
+    CXX_BITFIELD_MEMBER(20, 20, dat0lsl, raw); ///< DAT[0] line signal level
     CXX_BITFIELD_MEMBER(19, 19, wpspl, raw); ///< Write protect switch pin level
     CXX_BITFIELD_MEMBER(18, 18, cdpl, raw);  ///< Card detect pin level
     CXX_BITFIELD_MEMBER(16, 16, cinst, raw); ///< Card inserted
