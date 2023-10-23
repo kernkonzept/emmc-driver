@@ -157,3 +157,13 @@ below.
 The file `pcie-ecam.io` contains an IO config file which is able to use the
 QEMU PCI controller to search for attached eMMC devices.
 
+* eMMC emulation with QEMU:
+
+The attached patch extends QEMU SD card emulation to emulate eMMC devices.
+After applying the patch and recompiling QEMU, attach the following parameters
+to your QEMU command line (assuming that `$HOME/foobar.img` is the eMMC medium):
+```
+-drive id=sd_disk,file=$(HOME)/foobar.img,if=none,format=raw \
+-device sdhci-pci,id=sdhci \
+-device sd-card,drive=sd_disk,spec_version=3,emmc=on
+```
