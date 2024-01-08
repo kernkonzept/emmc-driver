@@ -252,17 +252,20 @@ struct Client_opts
             return false;
           }
 
+        // Copy parameters for lambda capture. The object itself is ephemeral!
+        const char *dev = device;
+        bool map_all = dma_map_all;
         blk_mgr->add_static_client(cap, device, No_partno, ds_max, readonly,
-                                   [this](Emmc::Base_device *b)
+                                   [dev, map_all](Emmc::Base_device *b)
          {
            Dbg(Dbg::Warn).printf("%s for device '%s'\033[m\n",
-                                 dma_map_all ? "\033[31;1mDMA-map-all enabled"
-                                             : "\033[32mDMA-map-all disabled",
-                                 device);
+                                 map_all ? "\033[31;1mDMA-map-all enabled"
+                                         : "\033[32mDMA-map-all disabled",
+                                 dev);
            if (auto *pd = dynamic_cast<Emmc::Part_device *>(b))
-             pd->set_dma_map_all(dma_map_all);
+             pd->set_dma_map_all(map_all);
            else
-             b->set_dma_map_all(dma_map_all);
+             b->set_dma_map_all(map_all);
          });
       }
 
