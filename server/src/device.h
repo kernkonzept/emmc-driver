@@ -91,7 +91,7 @@ private:
 
 template <class Driver>
 class Device
-: public Block_device::Device_with_request_queue<Base_parent_device>,
+: public Base_parent_device,
   public L4::Irqep_t<Device<Driver>>
 {
 public:
