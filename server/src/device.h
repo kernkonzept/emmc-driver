@@ -91,7 +91,7 @@ private:
 
 template <class Driver>
 class Device
-: public Base_parent_device,
+: public Block_device::Device_with_notification_domain<Base_parent_device>,
   public L4::Irqep_t<Device<Driver>>
 {
 public:
