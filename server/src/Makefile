@@ -1,7 +1,7 @@
 PKGDIR ?= ../..
 L4DIR  ?= $(PKGDIR)/../..
 
-SYSTEMS	:= x86-l4f amd64-l4f arm-l4f arm64-l4f
+SYSTEMS	:= x86-l4f amd64-l4f arm-l4f arm64-l4f riscv-l4f
 
 TARGET  = emmc-drv
 SRC_CC  = main.cc \
