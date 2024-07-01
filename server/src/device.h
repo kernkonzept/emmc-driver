@@ -24,6 +24,7 @@
 #include <l4/cxx/string>
 #include <l4/libblock-device/device.h>
 #include <l4/libblock-device/part_device.h>
+#include <l4/libblock-device/device_impl_dma.h>
 
 #include "debug.h"
 #include "drv_sdhci.h"
@@ -108,6 +109,7 @@ private:
 template <class Driver>
 class Device
 : public Block_device::Device_with_notification_domain<Base_parent_device>,
+  public Block_device::Device_dma_map_all_impl<Device<Driver>>,
   public L4::Irqep_t<Device<Driver>>
 {
 public:
@@ -140,9 +142,6 @@ public:
 
   void handle_irq();
 
-  void dma_unmap_region(Dma_info<Driver> *dma_info);
-
-private:
   bool is_read_only() const override
   { return false; }
 
@@ -193,6 +192,8 @@ private:
 
     return di;
   }
+
+private:
 
   void receive_irq(bool is_data) const;
 
@@ -388,25 +389,6 @@ private:
   std::map<L4Re::Dma_space::Dma_addr, Ds_offs_entry> _phys_map;
   //
   // ::::::::::::::::::::::::::
-};
-
-template <class Driver>
-struct Dma_info : public Block_device::Dma_region_info
-{
-  L4Re::Dma_space::Dma_addr addr;
-  l4_size_t size;
-  cxx::Ref_ptr<Block_device::Device> device;
-
-  Dma_info() = delete;
-  explicit Dma_info(L4Re::Dma_space::Dma_addr addr, l4_size_t size,
-                    cxx::Ref_ptr<Block_device::Device> device)
-  : addr(addr), size(size), device(device)
-  {}
-
-  virtual ~Dma_info() override
-  {
-    static_cast<Emmc::Device<Driver> *>(device.get())->dma_unmap_region(this);
-  }
 };
 
 } // namespace Emmc
