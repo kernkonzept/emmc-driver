@@ -18,6 +18,8 @@
 
 namespace Emmc {
 
+int Sdhci::Reg_write_delay::_write_delay = 0;
+
 Sdhci::Sdhci(int nr,
              L4::Cap<L4Re::Dataspace> iocap,
              L4::Cap<L4Re::Mmio_space> mmio_space,

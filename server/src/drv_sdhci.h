@@ -129,6 +129,26 @@ private:
   };
 
   /**
+   * Base class for `Reg<offs>` that implements an optional write delay
+   */
+  class Reg_write_delay
+  {
+  public:
+    static void set_write_delay(int delay) { _write_delay = delay; }
+    static void reset_write_delay() { _write_delay = 0; }
+
+  protected:
+    static void write_delay()
+    {
+      if (_write_delay)
+        l4_ipc_sleep_ms(_write_delay);
+    }
+
+  private:
+    static int _write_delay;
+  };
+
+  /**
    * Convenience class for implicit register offset handling.
    * It implements a bit field which is either initialized with zero, with a
    * certain value or by reading the corresponding device register. Then
@@ -138,13 +158,17 @@ private:
    * parameter.
    */
   template <enum Regs offs>
-  struct Reg
+  struct Reg : public Reg_write_delay
   {
     explicit Reg() : raw(0) {}
     explicit Reg(Hw_regs const &regs) : raw(regs[offs]) {}
     explicit Reg(l4_uint32_t v) : raw(v) {}
     l4_uint32_t read(Hw_regs const &regs) { raw = regs[offs]; return raw; }
-    void write(Hw_regs &regs) { regs[offs] = raw; }
+    void write(Hw_regs &regs)
+    {
+      regs[offs] = raw;
+      write_delay();
+    }
     l4_uint32_t raw;
   };
 
