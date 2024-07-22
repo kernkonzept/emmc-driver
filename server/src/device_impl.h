@@ -473,22 +473,31 @@ Device<Driver>::start_device_scan(Errand::Callback const &cb)
           _drv.set_bus_width(Mmc::Bus_width::Width_1bit);
           _drv.set_clock_and_timing(400 * KHz, Mmc::Legacy);
 
-          cmd->init(Mmc::Cmd0_go_idle_state);
-          cmd_exec(cmd);
-          cmd->check_error("CMD0: GO_IDLE");
+          for (unsigned i = 0; i < 2; ++i)
+            {
+              cmd->init(Mmc::Cmd0_go_idle_state);
+              cmd_exec(cmd);
+              cmd->check_error("CMD0: GO_IDLE");
 
-          Mmc::Arg_cmd8_send_if_cond a8;
-          a8.check_pattern() = 0xaa;
-          a8.voltage_suppl() = a8.Volt_27_36;
-          cmd->init_arg(Mmc::Cmd8_send_if_cond, a8.raw);
-          cmd->flags.expected_error() = true;
-          cmd_exec(cmd);
+              Mmc::Arg_cmd8_send_if_cond a8;
+              a8.check_pattern() = 0xaa;
+              a8.voltage_suppl() = a8.Volt_27_36;
+              cmd->init_arg(Mmc::Cmd8_send_if_cond, a8.raw);
+              cmd->flags.expected_error() = true;
+              cmd_exec(cmd);
 
-          if (cmd->status == Cmd::Success)
-            info.printf("Initial SEND_IF_COND response: %08x (voltage %saccepted).\n",
-                        Mmc::Rsp_r7(cmd->resp[0]).raw,
-                        Mmc::Rsp_r7(cmd->resp[0]).voltage_accepted()
-                          ? "" : "NOT ");
+              if (   cmd->status == Cmd::Success
+                  || cmd->status == Cmd::Cmd_timeout)
+                {
+                  info.printf("Initial SEND_IF_COND response: %08x (voltage %saccepted).\n",
+                              Mmc::Rsp_r7(cmd->resp[0]).raw,
+                              Mmc::Rsp_r7(cmd->resp[0]).voltage_accepted()
+                              ? "" : "NOT ");
+                  break;
+                }
+              else if (i > 0)
+                L4Re::throw_error(-L4_EIO, "Unusable card");
+            }
 
           if (   !power_up_sd(cmd)
               && !power_up_mmc(cmd))
