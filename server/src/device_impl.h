@@ -888,6 +888,8 @@ template <class Driver>
 bool
 Device<Driver>::power_up_sd(Cmd *cmd)
 {
+  info.printf("Trying sd...\n");
+
   _rca = 0;
 
   cmd->init(Mmc::Cmd5_io_send_op_cond);
@@ -1176,6 +1178,8 @@ template <class Driver>
 bool
 Device<Driver>::power_up_mmc(Cmd *cmd)
 {
+  info.printf("Trying mmc...\n");
+
   cmd->init(Mmc::Cmd1_send_op_cond);
   cmd_exec(cmd);
   if (cmd->error())
