@@ -22,7 +22,7 @@ namespace Emmc {
 Sdhi::Sdhi(int nr,
            L4::Cap<L4Re::Dataspace> iocap,
            L4::Cap<L4Re::Mmio_space> mmio_space,
-           l4_addr_t mmio_base, bool,
+           l4_addr_t mmio_base, Drv<Sdhi>::Type,
            L4Re::Util::Shared_cap<L4Re::Dma_space> const &,
            l4_uint32_t, Receive_irq receive_irq)
 : Drv(iocap, mmio_space, mmio_base, receive_irq),

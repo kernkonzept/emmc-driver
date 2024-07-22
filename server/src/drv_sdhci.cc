@@ -21,7 +21,7 @@ namespace Emmc {
 Sdhci::Sdhci(int nr,
              L4::Cap<L4Re::Dataspace> iocap,
              L4::Cap<L4Re::Mmio_space> mmio_space,
-             l4_addr_t mmio_base, bool is_usdhc,
+             l4_addr_t mmio_base, Type type,
              L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
              l4_uint32_t host_clock, Receive_irq receive_irq)
 : Drv(iocap, mmio_space, mmio_base, receive_irq),
@@ -30,14 +30,14 @@ Sdhci::Sdhci(int nr,
                   L4Re::Rm::F::Cache_uncached),
   _adma2_desc_phys(_adma2_desc_mem.pget()),
   _adma2_desc(_adma2_desc_mem.get<Adma2_desc_64>()),
-  _is_usdhc(is_usdhc),
+  _type(type),
   _host_clock(host_clock),
   warn(Dbg::Warn, "sdhci", nr),
   info(Dbg::Info, "sdhci", nr),
   trace(Dbg::Trace, "sdhci", nr),
   trace2(Dbg::Trace2, "sdhci", nr)
 {
-  trace.printf("Assuming %s eMMC controller.\n", is_usdhc ? "uSDHC" : "SDHCI");
+  trace.printf("Assuming %s eMMC controller.\n", type_name(type));
   Reg_cap1_sdhci cap1(_regs);
   info.printf("SDHCI controller capabilities: %08x (%d-bit). SDHCI version %s.\n",
               cap1.raw, cap1.bit64_v3() ? 64 : 32,
@@ -59,14 +59,14 @@ Sdhci::init()
   vs2.write(_regs);
 
   sc.rsta() = 1;
-  if (_is_usdhc)
+  if (_type == Usdhc)
     sc.raw |= 0xf;
   sc.write(_regs);
 
   Util::poll(10000, [this] { return !Reg_sys_ctrl(_regs).rsta(); },
              "Software reset all");
 
-  if (_is_usdhc)
+  if (_type == Usdhc)
     {
       Reg_host_ctrl_cap cc(_regs);
       trace.printf("Host controller capabilities (%08x): sdr50=%d, sdr104=%d, ddr50=%d\n",
@@ -118,7 +118,7 @@ Sdhci::init()
       hc.write(_regs);
     }
 
-  if (_is_usdhc)
+  if (_type == Usdhc)
     {
       Reg_tuning_ctrl tc(_regs);
       if (Usdhc_std_tuning)
@@ -170,7 +170,7 @@ Sdhci::handle_irq_cmd(Cmd *cmd, Reg_int_status is)
     {
       is_ack.ctoe() = 1;
       is_ack.cc() = is.cc();
-      if (_is_usdhc)
+      if (_type == Usdhc)
         {
           Reg_pres_state ps(_regs);
           if (ps.cihb())
@@ -263,7 +263,7 @@ Sdhci::handle_irq_data(Cmd *cmd, Reg_int_status is)
           l4_uint32_t data_xferred = blks_xferred * cmd->blocksize;
           cmd->blockcnt  -= blks_xferred;
           cmd->data_phys += data_xferred;
-          if (_is_usdhc)
+          if (_type == Usdhc)
             for (;;)
               if (!Reg_pres_state(_regs).dla())
                 break;
@@ -317,7 +317,7 @@ Sdhci::cmd_submit(Cmd *cmd)
   Reg_cmd_xfr_typ xt;  // SDHCI + uSDHC
   Reg_mix_ctrl mc;     // uSDHC
 
-  if (_is_usdhc)
+  if (_type == Usdhc)
     mc.read(_regs);
 
   xt.cmdinx() = cmd->cmd_idx();
@@ -339,7 +339,7 @@ Sdhci::cmd_submit(Cmd *cmd)
 
   if (cmd->flags.has_data())
     {
-      if (_is_usdhc)
+      if (_type == Usdhc)
         {
           Reg_wtmk_lvl wml(_regs);
           wml.rd_wml() = Reg_wtmk_lvl::Wml_dma;
@@ -403,12 +403,12 @@ Sdhci::cmd_submit(Cmd *cmd)
       // XXX Timeout ...
 
       xt.dpsel() = 1;
-      if (_is_usdhc)
+      if (_type == Usdhc)
         mc.dmaen() = 1;
       else
         xt.dmaen() = 1;
 
-      if (_is_usdhc)
+      if (_type == Usdhc)
         {
           mc.bcen() = !!(cmd->blockcnt > 1);
           mc.msbsel() = !!(cmd->blockcnt > 1);
@@ -419,14 +419,14 @@ Sdhci::cmd_submit(Cmd *cmd)
           xt.msbsel() = !!(cmd->blockcnt > 1);
         }
 
-      if (_is_usdhc)
+      if (_type == Usdhc)
         mc.dtdsel() = !!(cmd->cmd & Mmc::Dir_read);
       else
         xt.dtdsel() = !!(cmd->cmd & Mmc::Dir_read);
     }
   else // no data
     {
-      if (_is_usdhc)
+      if (_type == Usdhc)
         {
           mc.ac12en() = 0;
           mc.ac23en() = 0;
@@ -451,7 +451,7 @@ Sdhci::cmd_submit(Cmd *cmd)
       wml.wr_brst_len() = Reg_wtmk_lvl::Brst_dma;
       wml.write(_regs);
 
-      if (_is_usdhc)
+      if (_type == Usdhc)
         {
           mc.dmaen() = 0;
           mc.bcen() = 0;
@@ -479,7 +479,7 @@ Sdhci::cmd_submit(Cmd *cmd)
     {
       if (Dma_adma2)
         {
-          if (_is_usdhc)
+          if (_type == Usdhc)
             {
               if (cmd->flags.auto_cmd23())
                 {
@@ -496,7 +496,7 @@ Sdhci::cmd_submit(Cmd *cmd)
         }
       else
         {
-          if (_is_usdhc)
+          if (_type == Usdhc)
             for (;;)
               if (!Reg_pres_state(_regs).dla())
                 break;
@@ -526,7 +526,7 @@ Sdhci::cmd_submit(Cmd *cmd)
     trace.printf("Send \033[32mCMD%d (arg=%08x) -- %s\033[m\n",
                  cmd->cmd_idx(), cmd->arg, cmd->cmd_to_str().c_str());
 
-  if (_is_usdhc)
+  if (_type == Usdhc)
     mc.write(_regs);
   xt.write(_regs);
 
@@ -678,7 +678,7 @@ Sdhci::set_clock_and_timing(l4_uint32_t freq, Mmc::Timing timing, bool strobe)
   else
     _ddr_active = false;
   set_clock(freq);
-  if (_is_usdhc)
+  if (_type == Usdhc)
     {
       Reg_mix_ctrl mc(_regs);
       mc.ddr_en() = 0;
@@ -777,7 +777,7 @@ Sdhci::set_voltage(Mmc::Voltage voltage)
       return;
     }
 
-  if (_is_usdhc)
+  if (_type == Usdhc)
     {
       Reg_vend_spec vs(_regs);
       if (voltage == Mmc::Voltage_330)
@@ -797,7 +797,7 @@ Sdhci::set_voltage(Mmc::Voltage voltage)
 void
 Sdhci::clock_disable()
 {
-  if (_is_usdhc)
+  if (_type == Usdhc)
     {
       // uSDHC: 10.3.6.7
       Reg_vend_spec vs(_regs);
@@ -812,7 +812,7 @@ Sdhci::clock_disable()
 void
 Sdhci::clock_enable()
 {
-  if (_is_usdhc)
+  if (_type == Usdhc)
     {
       Reg_vend_spec vs(_regs);
       vs.frc_sdclk_on() = 1;
@@ -826,7 +826,7 @@ Sdhci::clock_enable()
 void
 Sdhci::reset_tuning()
 {
-  if (_is_usdhc)
+  if (_type == Usdhc)
     {
       if (Usdhc_std_tuning)
         {

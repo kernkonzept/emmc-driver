@@ -593,12 +593,17 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
         {
         case Dev_qemu_sdhci:
         case Dev_usdhc:
-          drv.add_disk(cxx::make_ref_obj<Emmc::Device<Emmc::Sdhci>>(
-                         device_nr++, mmio_addr, iocap, mmio_space, irq_num,
-                         is_irq_level, icu, dma, server.registry(),
-                         dev_type == Dev_usdhc, host_clock, max_seg,
-                         device_type_disable),
-                       device_scan_finished);
+          {
+            using Type = Emmc::Drv<Emmc::Sdhci>::Type;
+            Type const type = (dev_type == Dev_usdhc)
+                                ? Type::Usdhc
+                                : Type::Sdhci;
+            drv.add_disk(cxx::make_ref_obj<Emmc::Device<Emmc::Sdhci>>(
+                           device_nr++, mmio_addr, iocap, mmio_space, irq_num,
+                           is_irq_level, icu, dma, server.registry(),
+                           type, host_clock, max_seg, device_type_disable),
+                         device_scan_finished);
+          }
           break;
 
         case Dev_sdhi_emu:
@@ -610,7 +615,8 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
           drv.add_disk(cxx::make_ref_obj<Emmc::Device<Emmc::Sdhi>>(
                          device_nr++, mmio_addr, iocap, mmio_space, irq_num,
                          is_irq_level, icu, dma, server.registry(),
-                         false, host_clock, max_seg, device_type_disable),
+                         Emmc::Drv<Emmc::Sdhi>::Sdhi, host_clock, max_seg,
+                         device_type_disable),
                        device_scan_finished);
           break;
 
@@ -622,7 +628,8 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
           drv.add_disk(cxx::make_ref_obj<Emmc::Device<Emmc::Sdhi>>(
                          device_nr++, mmio_addr, iocap, mmio_space, irq_num,
                          is_irq_level, icu, dma, server.registry(),
-                         false, host_clock, max_seg, device_type_disable),
+                         Emmc::Drv<Emmc::Sdhi>::Sdhi, host_clock, max_seg,
+                         device_type_disable),
                        device_scan_finished);
           break;
 

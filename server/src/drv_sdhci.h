@@ -32,7 +32,7 @@ public:
   { return Auto_cmd12; }
 
   bool auto_cmd23() const
-  { return _is_usdhc && Auto_cmd23; }
+  { return (_type == Usdhc) && Auto_cmd23; }
 
   static bool dma_adma2()
   { return Dma_adma2; }
@@ -932,11 +932,24 @@ private:
   };
   static_assert(sizeof(Adma2_desc_64) == 16, "Size of Adma2_desc_64!");
 
+  static char const *type_name(Drv<Sdhci>::Type t)
+  {
+    switch (t)
+      {
+      case Drv<Sdhci>::Sdhci:
+        return "SDHCI";
+      case Drv<Sdhci>::Usdhc:
+        return "uSDHC";
+      default:
+        return "<unknown type>";
+      }
+  }
+
 public:
   explicit Sdhci(int nr,
                  L4::Cap<L4Re::Dataspace> iocap,
                  L4::Cap<L4Re::Mmio_space> mmio_space,
-                 l4_addr_t mmio_base, bool is_usdhc,
+                 l4_addr_t mmio_base, Drv<Sdhci>::Type type,
                  L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
                  l4_uint32_t host_clock, Receive_irq receive_irq);
 
@@ -965,7 +978,7 @@ public:
   /** Return true if any of the UHS timings is supported by the controller. */
   bool supp_uhs_timings(Mmc::Timing timing) const
   {
-    if (_is_usdhc)
+    if (_type == Usdhc)
       {
         Reg_host_ctrl_cap cc(_regs);
         return    (timing & Mmc::Uhs_sdr12) // always supported
@@ -1086,7 +1099,7 @@ private:
   Inout_buffer _adma2_desc_mem;         ///< Dataspace for descriptor memory.
   L4Re::Dma_space::Dma_addr _adma2_desc_phys; ///< Physical address of ADMA2 descs.
   Adma2_desc_64 *_adma2_desc;           ///< ADMA2 descriptor list (32/64-bit).
-  bool _is_usdhc;                       ///< True if uSDHC mode.
+  Type _type;                           ///< The specific type of Sdhci.
   bool _ddr_active = false;             ///< True if double-data timing.
   bool _adma2_64 = false;               ///< True if 64-bit ADMA2.
   l4_uint32_t _host_clock = 400000000;  ///< Reference clock frequency.
