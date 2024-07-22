@@ -32,6 +32,7 @@ public:
     Sdhi,  ///< Sdhi driver
     Sdhci, ///< Sdhci driver
     Usdhc, ///< Sdhci driver with uSDHC modifications
+    Iproc, ///< Sdhci driver with iproc modifications (e.g. bcm2711)
   };
 
   explicit Drv(L4::Cap<L4Re::Dataspace> iocap,
@@ -120,6 +121,12 @@ public:
    */
   static bool region_requires_bounce_buffer(l4_addr_t dma_addr, l4_size_t size)
   { return dma_addr + size > (1ULL << 32); }
+
+  /**
+   * Perform the sdio reset, if necessary. The default is to not do anything.
+   */
+  void sdio_reset(Cmd*)
+  { }
 
   Hw_regs     _regs;                    ///< Controller MMIO registers.
   Receive_irq _receive_irq;             ///< IRQ receive function.

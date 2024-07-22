@@ -1588,6 +1588,20 @@ public:
     CXX_BITFIELD_MEMBER(30, 30, hcs, raw);         ///< SD: Host capacity supp
     CXX_BITFIELD_MEMBER(31, 31, not_busy, raw);    ///< 0: Card power up busy
   };
+
+  /**
+   * SD Specifications Part E1
+   * Figure 5-1: IO_RW_DIRECT command
+   */
+  struct Arg_cmd52_io_rw_direct : public Arg
+  {
+    using Arg::Arg;
+    CXX_BITFIELD_MEMBER(0, 7, write_data, raw);
+    CXX_BITFIELD_MEMBER(9, 25, address, raw);
+    CXX_BITFIELD_MEMBER(27, 27, read_after_write, raw);
+    CXX_BITFIELD_MEMBER(28, 30, function, raw);
+    CXX_BITFIELD_MEMBER(31, 31, write, raw);
+  };
 };
 
 } // namespace Emmc

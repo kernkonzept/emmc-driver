@@ -455,6 +455,7 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
     Dev_usdhc,          // i.MX8 uSDHC
     Dev_sdhi_emu,       // RCar3 SDHI -- emulator
     Dev_sdhi_rcar3,     // RCar3 SDHI -- bare metal
+    Dev_bcm2711,        // Broadcom Bcm2711-emmc2
   };
   Dev_type dev_type = Dev_unknown;
 
@@ -510,6 +511,8 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
         dev_type = Dev_sdhi_rcar3;
       else if (dev.is_compatible("renesas,sdhi-r8a7796") == 1)
         dev_type = Dev_sdhi_emu;
+      else if (dev.is_compatible("brcm,bcm2711-emmc2") == 1)
+        dev_type = Dev_bcm2711;
       else
         return; // no match
 
@@ -574,6 +577,7 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
     case 0x5b010000: host_clock = 396000000; break;
     case 0x5b020000: host_clock = 198000000; break;
     case 0x5b030000: host_clock = 198000000; break;
+    case 0xfe340000: host_clock = 100000000; break;
     default:
          if (dev_type == Dev_usdhc)
            L4Re::throw_error(-L4_EINVAL, "Unknown host clock");
@@ -604,6 +608,15 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
                            type, host_clock, max_seg, device_type_disable),
                          device_scan_finished);
           }
+          break;
+
+        case Dev_bcm2711:
+          drv.add_disk(cxx::make_ref_obj<Emmc::Device<Emmc::Sdhci>>(
+                         device_nr++, mmio_addr, iocap, mmio_space, irq_num,
+                         is_irq_level, icu, dma, server.registry(),
+                         Emmc::Drv<Emmc::Sdhci>::Iproc, host_clock, max_seg,
+                         device_type_disable),
+                       device_scan_finished);
           break;
 
         case Dev_sdhi_emu:

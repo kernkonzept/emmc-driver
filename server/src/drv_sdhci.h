@@ -34,8 +34,8 @@ public:
   bool auto_cmd23() const
   { return (_type == Usdhc) && Auto_cmd23; }
 
-  static bool dma_adma2()
-  { return Dma_adma2; }
+  bool dma_adma2() const
+  { return (_type != Iproc) && Dma_adma2; }
 
 private:
   enum
@@ -265,7 +265,7 @@ private:
     CXX_BITFIELD_MEMBER(26, 26, d2lsl, raw); ///< DATA2 line signal level
     CXX_BITFIELD_MEMBER(25, 25, d1lsl, raw); ///< DATA1 line signal level
     CXX_BITFIELD_MEMBER(24, 24, d0lsl, raw); ///< DATA0 line signal level
-    CXX_BITFIELD_MEMBER(24, 31, dlsl, raw);  ///< DATA{7:0] line signal level
+    CXX_BITFIELD_MEMBER(24, 31, dlsl, raw);  ///< DATA[7:0] line signal level
     // <<< uSDHC
     CXX_BITFIELD_MEMBER(24, 24, clsl, raw);  ///< CMD line signal level
     CXX_BITFIELD_MEMBER(20, 23, datlsl, raw);  ///< DAT line signal level
@@ -365,7 +365,17 @@ private:
 
     CXX_BITFIELD_MEMBER(24, 31, wakeup, raw);
     CXX_BITFIELD_MEMBER(16, 23, gapctrl, raw);
-    CXX_BITFIELD_MEMBER(8, 15, power, raw);
+    // CXX_BITFIELD_MEMBER(13, 15, voltage_sel_vdd2, raw);
+    // CXX_BITFIELD_MEMBER(12, 12, bus_power_vdd2, raw);
+    CXX_BITFIELD_MEMBER(9, 11, voltage_sel, raw);
+    enum Voltage_mode
+    {
+      Voltage_33 = 7,
+      Voltage_30 = 6,
+      Voltage_18 = 5,
+      Voltage_unsupported = 0,
+    };
+    CXX_BITFIELD_MEMBER(8, 8, bus_power, raw);
     CXX_BITFIELD_MEMBER(7, 7, cdtest_en, raw);
     CXX_BITFIELD_MEMBER(6, 6, cdtest_ins, raw);
     CXX_BITFIELD_MEMBER(5, 5, bbit8, raw);     ///< 8-bit bus
@@ -1043,7 +1053,11 @@ public:
 
   /** Return true if the card is busy. */
   bool card_busy() const
-  { return !Reg_pres_state(_regs).d0lsl(); }
+  {
+    if (_type == Iproc)
+      return !Reg_pres_state(_regs).dat0lsl();
+    return !Reg_pres_state(_regs).d0lsl();
+  }
 
   /** Return supported power values by the controller. */
   Mmc::Reg_ocr supported_voltage() const
@@ -1053,6 +1067,8 @@ public:
     ocr.mv3300_3400() = 1;
     return ocr;
   }
+
+  void sdio_reset(Cmd *cmd);
 
 private:
   /**

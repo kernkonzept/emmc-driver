@@ -51,6 +51,9 @@ Sdhci::Sdhci(int nr,
 void
 Sdhci::init()
 {
+  if (_type == Iproc)
+    // This device needs a delay on each register write during initialization
+    Reg_write_delay::set_write_delay(1);
   Reg_sys_ctrl sc(_regs);
   sc.dtocv() = Reg_sys_ctrl::Data_timeout::Sdclk_max;
   sc.write(_regs);
@@ -102,21 +105,42 @@ Sdhci::init()
       vs2.write(_regs);
 
       Reg_prot_ctrl pc(_regs);
-      pc.dmasel() = Dma_adma2 ? pc.Dma_adma2 : pc.Dma_simple;
+      pc.dmasel() = dma_adma2() ? pc.Dma_adma2 : pc.Dma_simple;
       pc.write(_regs);
     }
   else
     {
-      sc.icen()  = 1;
-      sc.icst()  = 1; // XXX internal clock stable
-      sc.sdcen() = 1;
-      sc.pllen() = 1;
-      sc.write(_regs);
+      if (_type == Iproc)
+        {
+          sc.raw = 0;
+          sc.icen() = 1;
+          sc.write(_regs);
+          Util::poll(10000, [this] { return !!Reg_sys_ctrl(_regs).icst(); },
+                     "Clock stable");
+          sc.sdcen() = 1;
+          sc.pllen() = 1;
+          sc.write(_regs);
+          Util::poll(10000, [this] { return !!Reg_sys_ctrl(_regs).icst(); },
+                     "PLL clock stable");
+        }
+      else
+        {
+          sc.icen()  = 1;
+          sc.icst()  = 1; // XXX internal clock stable
+          sc.sdcen() = 1;
+          sc.pllen() = 1;
+          sc.write(_regs);
+        }
       Reg_autocmd12_err_status().write(_regs);
       Reg_clk_tune_ctrl_status().write(_regs);
 
       Reg_host_ctrl hc(_regs);
-      hc.dmamod() = Dma_adma2 ? hc.Adma32 : hc.Sdma;
+      if (_type == Iproc)
+        {
+          hc.voltage_sel() = Reg_host_ctrl::Voltage_33;
+          hc.bus_power() = 1;
+        }
+      hc.dmamod() = dma_adma2() ? hc.Adma32 : hc.Sdma;
       hc.write(_regs);
     }
 
@@ -134,6 +158,9 @@ Sdhci::init()
         tc.std_tuning_en() = 0;
       tc.write(_regs);
     }
+
+  if (_type == Iproc)
+    Reg_write_delay::reset_write_delay();
 }
 
 Cmd *
@@ -257,7 +284,7 @@ Sdhci::handle_irq_data(Cmd *cmd, Reg_int_status is)
       l4_uint32_t blks_to_xfer = Reg_blk_att(_regs).blkcnt();
       if (blks_to_xfer)
         {
-          if (Dma_adma2)
+          if (dma_adma2())
             L4Re::throw_error(-L4_EINVAL,
                               "Implement aborted transfer in ADMA2 mode");
           is_ack.write(_regs);
@@ -354,7 +381,7 @@ Sdhci::cmd_submit(Cmd *cmd)
       else
         xt.ac12en() = Auto_cmd12 && cmd->flags.inout_cmd12();
 
-      if (Dma_adma2)
+      if (dma_adma2())
         {
           // `cmd` refers to a list of blocks (cmd->blocks != nullptr).
           if (cmd->blocks)
@@ -479,7 +506,7 @@ Sdhci::cmd_submit(Cmd *cmd)
 
   if (dma_addr != ~0ULL)
     {
-      if (Dma_adma2)
+      if (dma_adma2())
         {
           if (_type == Usdhc)
             {
@@ -729,7 +756,8 @@ Sdhci::set_clock(l4_uint32_t freq)
 {
   Reg_sys_ctrl sc(_regs);
   sc.icen() = 0;
-  sc.icst() = 0;
+  if (_type != Iproc)
+    sc.icst() = 0;
   sc.sdcen() = 0;
   sc.dvs() = 0;
   sc.sdclkfs() = 0;
@@ -747,7 +775,14 @@ Sdhci::set_clock(l4_uint32_t freq)
 
   sc.read(_regs);
   sc.icen() = 1;
-  sc.icst() = 1;
+  if (_type == Iproc)
+    {
+      sc.write(_regs);
+      Util::poll(10000, [this] { return !!Reg_sys_ctrl(_regs).icst(); },
+                 "Clock stable");
+    }
+  else
+    sc.icst() = 1;
   sc.sdcen() = 1;
   sc.dvs() = div;
   sc.sdclkfs() = pre_div;
@@ -991,6 +1026,34 @@ Sdhci::adma2_dump_descs() const
     adma2_dump_descs<Adma2_desc_64>(_adma2_desc);
   else
     adma2_dump_descs<Adma2_desc_32>(_adma2_desc);
+}
+
+void
+Sdhci::sdio_reset(Cmd *cmd)
+{
+  if (_type == Iproc)
+    {
+      const int SDIO_CCCR_ABORT = 0x6;
+      Mmc::Arg_cmd52_io_rw_direct a52;
+      a52.address() = SDIO_CCCR_ABORT;
+      a52.function() = 0;
+      a52.write() = 0;
+      cmd->init_arg(Mmc::Cmd52_io_rw_direct, a52.raw);
+      cmd->flags.expected_error() = true;
+      cmd_exec(cmd);
+      if (!cmd->error())
+        L4Re::throw_error(-L4_EIO, "IO_RW_DIRECT (read) succeeded");
+
+      a52.raw = 0;
+      a52.write_data() = 0x8;
+      a52.address() = SDIO_CCCR_ABORT;
+      a52.function() = 0;
+      a52.write() = 1;
+
+      cmd->init_arg(Mmc::Cmd52_io_rw_direct, a52.raw);
+      cmd->flags.expected_error() = true;
+      cmd_exec(cmd);
+    }
 }
 
 } // namespace Emmc

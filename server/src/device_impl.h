@@ -443,6 +443,8 @@ Device<Driver>::start_device_scan(Errand::Callback const &cb)
   if (!cmd)
     return;
 
+  _drv.sdio_reset(cmd);
+
   _init_thread = std::thread([this, cmd, cb]
     {
       struct Wakeup_handler : public L4::Irqep_t<Wakeup_handler>
