@@ -974,6 +974,8 @@ private:
         return "SDHCI";
       case Drv<Sdhci>::Usdhc:
         return "uSDHC";
+      case Drv<Sdhci>::Iproc:
+        return "IProc";
       default:
         return "<unknown type>";
       }
