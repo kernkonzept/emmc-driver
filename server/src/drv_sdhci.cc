@@ -51,7 +51,7 @@ Sdhci::Sdhci(int nr,
 void
 Sdhci::init()
 {
-  if (_type == Iproc)
+  if (_type == Type::Iproc)
     // This device needs a delay on each register write during initialization
     Reg_write_delay::set_write_delay(1);
   Reg_sys_ctrl sc(_regs);
@@ -64,14 +64,14 @@ Sdhci::init()
   vs2.write(_regs);
 
   sc.rsta() = 1;
-  if (_type == Usdhc)
+  if (_type == Type::Usdhc)
     sc.raw |= 0xf;
   sc.write(_regs);
 
   Util::poll(10000, [this] { return !Reg_sys_ctrl(_regs).rsta(); },
              "Software reset all");
 
-  if (_type == Usdhc)
+  if (_type == Type::Usdhc)
     {
       Reg_host_ctrl_cap cc(_regs);
       trace.printf("Host controller capabilities (%08x): sdr50=%d, sdr104=%d, ddr50=%d\n",
@@ -110,7 +110,7 @@ Sdhci::init()
     }
   else
     {
-      if (_type == Iproc)
+      if (_type == Type::Iproc)
         {
           sc.raw = 0;
           sc.icen() = 1;
@@ -135,7 +135,7 @@ Sdhci::init()
       Reg_clk_tune_ctrl_status().write(_regs);
 
       Reg_host_ctrl hc(_regs);
-      if (_type == Iproc)
+      if (_type == Type::Iproc)
         {
           hc.voltage_sel() = Reg_host_ctrl::Voltage_33;
           hc.bus_power() = 1;
@@ -144,7 +144,7 @@ Sdhci::init()
       hc.write(_regs);
     }
 
-  if (_type == Usdhc)
+  if (_type == Type::Usdhc)
     {
       Reg_tuning_ctrl tc(_regs);
       if (Usdhc_std_tuning)
@@ -159,7 +159,7 @@ Sdhci::init()
       tc.write(_regs);
     }
 
-  if (_type == Iproc)
+  if (_type == Type::Iproc)
     Reg_write_delay::reset_write_delay();
 }
 
@@ -199,7 +199,7 @@ Sdhci::handle_irq_cmd(Cmd *cmd, Reg_int_status is)
     {
       is_ack.ctoe() = 1;
       is_ack.cc() = is.cc();
-      if (_type == Usdhc)
+      if (_type == Type::Usdhc)
         {
           Reg_pres_state ps(_regs);
           if (ps.cihb())
@@ -292,7 +292,7 @@ Sdhci::handle_irq_data(Cmd *cmd, Reg_int_status is)
           l4_uint32_t data_xferred = blks_xferred * cmd->blocksize;
           cmd->blockcnt  -= blks_xferred;
           cmd->data_phys += data_xferred;
-          if (_type == Usdhc)
+          if (_type == Type::Usdhc)
             for (;;)
               if (!Reg_pres_state(_regs).dla())
                 break;
@@ -346,7 +346,7 @@ Sdhci::cmd_submit(Cmd *cmd)
   Reg_cmd_xfr_typ xt;  // SDHCI + uSDHC
   Reg_mix_ctrl mc;     // uSDHC
 
-  if (_type == Usdhc)
+  if (_type == Type::Usdhc)
     mc.read(_regs);
 
   xt.cmdinx() = cmd->cmd_idx();
@@ -368,7 +368,7 @@ Sdhci::cmd_submit(Cmd *cmd)
 
   if (cmd->flags.has_data())
     {
-      if (_type == Usdhc)
+      if (_type == Type::Usdhc)
         {
           Reg_wtmk_lvl wml(_regs);
           wml.rd_wml() = Reg_wtmk_lvl::Wml_dma;
@@ -432,12 +432,12 @@ Sdhci::cmd_submit(Cmd *cmd)
       // XXX Timeout ...
 
       xt.dpsel() = 1;
-      if (_type == Usdhc)
+      if (_type == Type::Usdhc)
         mc.dmaen() = 1;
       else
         xt.dmaen() = 1;
 
-      if (_type == Usdhc)
+      if (_type == Type::Usdhc)
         {
           mc.bcen() = !!(cmd->blockcnt > 1);
           mc.msbsel() = !!(cmd->blockcnt > 1);
@@ -448,14 +448,14 @@ Sdhci::cmd_submit(Cmd *cmd)
           xt.msbsel() = !!(cmd->blockcnt > 1);
         }
 
-      if (_type == Usdhc)
+      if (_type == Type::Usdhc)
         mc.dtdsel() = !!(cmd->cmd & Mmc::Dir_read);
       else
         xt.dtdsel() = !!(cmd->cmd & Mmc::Dir_read);
     }
   else // no data
     {
-      if (_type == Usdhc)
+      if (_type == Type::Usdhc)
         {
           mc.ac12en() = 0;
           mc.ac23en() = 0;
@@ -480,7 +480,7 @@ Sdhci::cmd_submit(Cmd *cmd)
       wml.wr_brst_len() = Reg_wtmk_lvl::Brst_dma;
       wml.write(_regs);
 
-      if (_type == Usdhc)
+      if (_type == Type::Usdhc)
         {
           mc.dmaen() = 0;
           mc.bcen() = 0;
@@ -508,7 +508,7 @@ Sdhci::cmd_submit(Cmd *cmd)
     {
       if (dma_adma2())
         {
-          if (_type == Usdhc)
+          if (_type == Type::Usdhc)
             {
               if (cmd->flags.auto_cmd23())
                 {
@@ -525,7 +525,7 @@ Sdhci::cmd_submit(Cmd *cmd)
         }
       else
         {
-          if (_type == Usdhc)
+          if (_type == Type::Usdhc)
             for (;;)
               if (!Reg_pres_state(_regs).dla())
                 break;
@@ -555,7 +555,7 @@ Sdhci::cmd_submit(Cmd *cmd)
     trace.printf("Send \033[32mCMD%d (arg=%08x) -- %s\033[m\n",
                  cmd->cmd_idx(), cmd->arg, cmd->cmd_to_str().c_str());
 
-  if (_type == Usdhc)
+  if (_type == Type::Usdhc)
     mc.write(_regs);
   xt.write(_regs);
 
@@ -707,7 +707,7 @@ Sdhci::set_clock_and_timing(l4_uint32_t freq, Mmc::Timing timing, bool strobe)
   else
     _ddr_active = false;
   set_clock(freq);
-  if (_type == Usdhc)
+  if (_type == Type::Usdhc)
     {
       Reg_mix_ctrl mc(_regs);
       mc.ddr_en() = 0;
@@ -756,7 +756,7 @@ Sdhci::set_clock(l4_uint32_t freq)
 {
   Reg_sys_ctrl sc(_regs);
   sc.icen() = 0;
-  if (_type != Iproc)
+  if (_type != Type::Iproc)
     sc.icst() = 0;
   sc.sdcen() = 0;
   sc.dvs() = 0;
@@ -775,7 +775,7 @@ Sdhci::set_clock(l4_uint32_t freq)
 
   sc.read(_regs);
   sc.icen() = 1;
-  if (_type == Iproc)
+  if (_type == Type::Iproc)
     {
       sc.write(_regs);
       Util::poll(10000, [this] { return !!Reg_sys_ctrl(_regs).icst(); },
@@ -814,7 +814,7 @@ Sdhci::set_voltage(Mmc::Voltage voltage)
       return;
     }
 
-  if (_type == Usdhc)
+  if (_type == Type::Usdhc)
     {
       Reg_vend_spec vs(_regs);
       if (voltage == Mmc::Voltage_330)
@@ -834,7 +834,7 @@ Sdhci::set_voltage(Mmc::Voltage voltage)
 void
 Sdhci::clock_disable()
 {
-  if (_type == Usdhc)
+  if (_type == Type::Usdhc)
     {
       // uSDHC: 10.3.6.7
       Reg_vend_spec vs(_regs);
@@ -849,7 +849,7 @@ Sdhci::clock_disable()
 void
 Sdhci::clock_enable()
 {
-  if (_type == Usdhc)
+  if (_type == Type::Usdhc)
     {
       Reg_vend_spec vs(_regs);
       vs.frc_sdclk_on() = 1;
@@ -863,7 +863,7 @@ Sdhci::clock_enable()
 void
 Sdhci::reset_tuning()
 {
-  if (_type == Usdhc)
+  if (_type == Type::Usdhc)
     {
       if (Usdhc_std_tuning)
         {
@@ -1031,7 +1031,7 @@ Sdhci::adma2_dump_descs() const
 void
 Sdhci::sdio_reset(Cmd *cmd)
 {
-  if (_type == Iproc)
+  if (_type == Type::Iproc)
     {
       const int SDIO_CCCR_ABORT = 0x6;
       Mmc::Arg_cmd52_io_rw_direct a52;

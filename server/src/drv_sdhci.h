@@ -28,14 +28,21 @@ class Sdhci : public Drv<Sdhci>
   friend Drv;
 
 public:
+  enum class Type
+  {
+    Sdhci, ///< Sdhci driver
+    Usdhc, ///< Sdhci driver with uSDHC modifications
+    Iproc, ///< Sdhci driver with iproc modifications (e.g. bcm2711)
+  };
+
   static bool auto_cmd12()
   { return Auto_cmd12; }
 
   bool auto_cmd23() const
-  { return (_type == Usdhc) && Auto_cmd23; }
+  { return (_type == Type::Usdhc) && Auto_cmd23; }
 
   bool dma_adma2() const
-  { return (_type != Iproc) && Dma_adma2; }
+  { return (_type != Type::Iproc) && Dma_adma2; }
 
 private:
   enum
@@ -969,15 +976,15 @@ private:
   };
   static_assert(sizeof(Adma2_desc_64) == 16, "Size of Adma2_desc_64!");
 
-  static char const *type_name(Drv<Sdhci>::Type t)
+  static char const *type_name(Type t)
   {
     switch (t)
       {
-      case Drv<Sdhci>::Sdhci:
+      case Type::Sdhci:
         return "SDHCI";
-      case Drv<Sdhci>::Usdhc:
+      case Type::Usdhc:
         return "uSDHC";
-      case Drv<Sdhci>::Iproc:
+      case Type::Iproc:
         return "IProc";
       default:
         return "<unknown type>";
@@ -988,7 +995,7 @@ public:
   explicit Sdhci(int nr,
                  L4::Cap<L4Re::Dataspace> iocap,
                  L4::Cap<L4Re::Mmio_space> mmio_space,
-                 l4_addr_t mmio_base, Drv<Sdhci>::Type type,
+                 l4_addr_t mmio_base, Type type,
                  L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
                  l4_uint32_t host_clock, Receive_irq receive_irq);
 
@@ -1017,7 +1024,7 @@ public:
   /** Return true if any of the UHS timings is supported by the controller. */
   bool supp_uhs_timings(Mmc::Timing timing) const
   {
-    if (_type == Usdhc)
+    if (_type == Type::Usdhc)
       {
         Reg_host_ctrl_cap cc(_regs);
         return    (timing & Mmc::Uhs_sdr12) // always supported
@@ -1059,7 +1066,7 @@ public:
   /** Return true if the card is busy. */
   bool card_busy() const
   {
-    if (_type == Iproc)
+    if (_type == Type::Iproc)
       return !Reg_pres_state(_regs).dat0lsl();
     return !Reg_pres_state(_regs).d0lsl();
   }

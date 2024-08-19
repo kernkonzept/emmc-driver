@@ -27,14 +27,6 @@ class Drv
 public:
   using Hw_regs = L4drivers::Register_block<32>;
 
-  enum Type
-  {
-    Sdhi,  ///< Sdhi driver
-    Sdhci, ///< Sdhci driver
-    Usdhc, ///< Sdhci driver with uSDHC modifications
-    Iproc, ///< Sdhci driver with iproc modifications (e.g. bcm2711)
-  };
-
   explicit Drv(L4::Cap<L4Re::Dataspace> iocap,
                L4::Cap<L4Re::Mmio_space> mmio_space,
                l4_addr_t mmio_base,

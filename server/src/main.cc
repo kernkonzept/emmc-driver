@@ -598,7 +598,7 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
         case Dev_qemu_sdhci:
         case Dev_usdhc:
           {
-            using Type = Emmc::Drv<Emmc::Sdhci>::Type;
+            using Type = Emmc::Sdhci::Type;
             Type const type = (dev_type == Dev_usdhc)
                                 ? Type::Usdhc
                                 : Type::Sdhci;
@@ -614,7 +614,7 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
           drv.add_disk(cxx::make_ref_obj<Emmc::Device<Emmc::Sdhci>>(
                          device_nr++, mmio_addr, iocap, mmio_space, irq_num,
                          is_irq_level, icu, dma, server.registry(),
-                         Emmc::Drv<Emmc::Sdhci>::Iproc, host_clock, max_seg,
+                         Emmc::Sdhci::Type::Iproc, host_clock, max_seg,
                          device_type_disable),
                        device_scan_finished);
           break;
@@ -628,7 +628,7 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
           drv.add_disk(cxx::make_ref_obj<Emmc::Device<Emmc::Sdhi>>(
                          device_nr++, mmio_addr, iocap, mmio_space, irq_num,
                          is_irq_level, icu, dma, server.registry(),
-                         Emmc::Drv<Emmc::Sdhi>::Sdhi, host_clock, max_seg,
+                         Emmc::Sdhi::Type::Sdhi, host_clock, max_seg,
                          device_type_disable),
                        device_scan_finished);
           break;
@@ -641,7 +641,7 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
           drv.add_disk(cxx::make_ref_obj<Emmc::Device<Emmc::Sdhi>>(
                          device_nr++, mmio_addr, iocap, mmio_space, irq_num,
                          is_irq_level, icu, dma, server.registry(),
-                         Emmc::Drv<Emmc::Sdhi>::Sdhi, host_clock, max_seg,
+                         Emmc::Sdhi::Type::Sdhi, host_clock, max_seg,
                          device_type_disable),
                        device_scan_finished);
           break;

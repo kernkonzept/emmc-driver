@@ -120,7 +120,7 @@ public:
          int irq_num, bool is_irq_level, L4::Cap<L4::Icu> icu,
          L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
          L4Re::Util::Object_registry *registry,
-         typename Drv<Driver>::Type type,
+         typename Driver::Type type,
          l4_uint32_t host_clock, int max_seg,
          Mmc::Reg_ecsd::Ec196_device_type dt_disable);
 
