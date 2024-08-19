@@ -929,13 +929,13 @@ private:
     CXX_BITFIELD_MEMBER(0, 0, valid, word0);
 
     void reset()
-    { word1 = 0; word0 = 0; }
+    { cxx::write_now(&word1, 0); cxx::write_now(&word0, 0); }
 
     L4Re::Dma_space::Dma_addr get_addr() const
-    { return word1; }
+    { return cxx::access_once(&word1); }
 
     void set_addr(L4Re::Dma_space::Dma_addr addr)
-    { word1 = addr; }
+    { cxx::write_now(&word1, addr); }
 
     static L4Re::Dma_space::Dma_addr get_max_addr()
     { return ~0U; }
@@ -944,21 +944,24 @@ private:
 
   struct Adma2_desc_64 : public Adma2_desc_32
   {
+    // need to use cxx::access_once() / cxx::write_now() to prevent the compiler
+    // from merging access into an unaligned 64-bit access to word2 + word3
     l4_uint32_t word2, word3;
     CXX_BITFIELD_MEMBER(0, 31, addr_hi, word2);
     void reset()
     {
       Adma2_desc_32::reset();
-      word2 = 0;
+      cxx::write_now(&word2, 0);
     }
 
     L4Re::Dma_space::Dma_addr get_addr() const
-    { return (L4Re::Dma_space::Dma_addr)word2 << 32 | word1; }
+    { return (L4Re::Dma_space::Dma_addr)cxx::access_once(&word2) << 32
+             | cxx::access_once(&word1); }
 
     void set_addr(L4Re::Dma_space::Dma_addr addr)
     {
-      word1 = addr & 0xffffffff;
-      word2 = addr >> 32;
+      cxx::write_now(&word1, addr & 0xffffffff);
+      cxx::write_now(&word2, addr >> 32);
     }
 
     static L4Re::Dma_space::Dma_addr get_max_addr()

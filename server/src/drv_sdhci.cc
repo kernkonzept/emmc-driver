@@ -999,7 +999,7 @@ Sdhci::adma2_set_descs_memory_region(l4_addr_t phys, l4_uint32_t size)
   if (_adma2_64)
     adma2_set_descs_mem_region<Adma2_desc_64>(_adma2_desc, phys, size);
   else
-    adma2_set_descs_mem_region<Adma2_desc_64>(_adma2_desc, phys, size);
+    adma2_set_descs_mem_region<Adma2_desc_32>(_adma2_desc, phys, size);
 }
 
 template<typename T>
