@@ -446,7 +446,7 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
 {
   l4_addr_t mmio_addr = 0;
   int irq_num = 0;
-  bool is_irq_level;
+  L4_irq_mode irq_mode = L4_IRQ_F_LEVEL_HIGH;
 
   enum Dev_type
   {
@@ -497,7 +497,8 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
       irq_num = L4Re::chksys(dev.irq_enable(&trigger, &polarity),
                              "Enable interrupt.");
 
-      is_irq_level = trigger == 0;
+      if (trigger == 0)
+        irq_mode = L4_IRQ_F_LEVEL_HIGH;
 
       dev_type = Dev_qemu_sdhci;
     }
@@ -530,6 +531,8 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
             {
               if (!irq_num)
                 irq_num = res.start;
+
+              irq_mode = L4_irq_mode(res.flags);
             }
         }
 
@@ -544,8 +547,6 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
           info.printf("Device '%s' has no IRQ resource.\n", dev_info.name);
           return;
         }
-
-      is_irq_level = false;
     }
 
   unsigned long id = -1UL;
@@ -566,7 +567,7 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
 
   info.printf("Device @ %08lx: %sinterrupt: %d, %s-triggered.\n",
               mmio_addr, dev_type == Dev_qemu_sdhci ? "PCI " : "", irq_num,
-              is_irq_level ? "level" : "edge");
+              irq_mode == L4_IRQ_F_LEVEL_HIGH ? "level-high" : "edge");
 
   // XXX
   l4_uint32_t host_clock = 400000;
@@ -604,7 +605,7 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
                                 : Type::Sdhci;
             drv.add_disk(cxx::make_ref_obj<Emmc::Device<Emmc::Sdhci>>(
                            device_nr++, mmio_addr, iocap, mmio_space, irq_num,
-                           is_irq_level, icu, dma, server.registry(),
+                           irq_mode, icu, dma, server.registry(),
                            type, host_clock, max_seg, device_type_disable),
                          device_scan_finished);
           }
@@ -613,7 +614,7 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
         case Dev_bcm2711:
           drv.add_disk(cxx::make_ref_obj<Emmc::Device<Emmc::Sdhci>>(
                          device_nr++, mmio_addr, iocap, mmio_space, irq_num,
-                         is_irq_level, icu, dma, server.registry(),
+                         irq_mode, icu, dma, server.registry(),
                          Emmc::Sdhci::Type::Iproc, host_clock, max_seg,
                          device_type_disable),
                        device_scan_finished);
@@ -627,7 +628,7 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
           cpg->enable_register(Rcar3_cpg::Sd2ckcr, 0x201);
           drv.add_disk(cxx::make_ref_obj<Emmc::Device<Emmc::Sdhi>>(
                          device_nr++, mmio_addr, iocap, mmio_space, irq_num,
-                         is_irq_level, icu, dma, server.registry(),
+                         irq_mode, icu, dma, server.registry(),
                          Emmc::Sdhi::Type::Sdhi, host_clock, max_seg,
                          device_type_disable),
                        device_scan_finished);
@@ -640,7 +641,7 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
           cpg->enable_register(Rcar3_cpg::Sd2ckcr, 0x201);
           drv.add_disk(cxx::make_ref_obj<Emmc::Device<Emmc::Sdhi>>(
                          device_nr++, mmio_addr, iocap, mmio_space, irq_num,
-                         is_irq_level, icu, dma, server.registry(),
+                         irq_mode, icu, dma, server.registry(),
                          Emmc::Sdhi::Type::Sdhi, host_clock, max_seg,
                          device_type_disable),
                        device_scan_finished);

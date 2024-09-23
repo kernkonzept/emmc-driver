@@ -40,7 +40,7 @@ template <class Driver>
 Device<Driver>::Device(int nr, l4_addr_t mmio_addr,
                        L4::Cap<L4Re::Dataspace> iocap,
                        L4::Cap<L4Re::Mmio_space> mmio_space,
-                       int irq_num, bool is_irq_level, L4::Cap<L4::Icu> icu,
+                       int irq_num, L4_irq_mode irq_mode, L4::Cap<L4::Icu> icu,
                        L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
                        L4Re::Util::Object_registry *registry,
                        typename Driver::Type type,
@@ -49,7 +49,7 @@ Device<Driver>::Device(int nr, l4_addr_t mmio_addr,
 : _drv(nr, iocap, mmio_space, mmio_addr, type, dma, host_clock,
        [this](bool is_data) { receive_irq(is_data); }),
   _irq_num(irq_num),
-  _is_irq_level(is_irq_level),
+  _irq_mode(irq_mode),
   _icu(icu),
   _dma(dma),
   _max_seg(max_seg),
@@ -70,6 +70,9 @@ Device<Driver>::Device(int nr, l4_addr_t mmio_addr,
                "Allocate IRQ capability slot.");
   L4Re::chksys(L4Re::Env::env()->factory()->create(_irq),
                "Create IRQ capability at factory.");
+
+  L4Re::chksys(_icu->set_mode(_irq_num, _irq_mode), "Set IRQ mode.");
+
   int ret = L4Re::chksys(l4_error(_icu->bind(_irq_num, _irq)),
                          "Bind interrupt to ICU.");
   _irq_unmask_at_icu = ret == 1;
@@ -527,6 +530,8 @@ Device<Driver>::start_device_scan(Errand::Callback const &cb)
               // From now on, the server loop handles the interrupt.
               _irq = L4Re::chkcap(_registry->register_irq_obj(this),
                                   "Register IRQ server object.");
+
+              L4Re::chksys(_icu->set_mode(_irq_num, _irq_mode), "Set IRQ mode.");
 
               int ret = L4Re::chksys(l4_error(_icu->bind(_irq_num, _irq)),
                                      "Bind interrupt to ICU.");

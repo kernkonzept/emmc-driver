@@ -117,7 +117,7 @@ public:
   Device(int nr, l4_addr_t mmio_addr,
          L4::Cap<L4Re::Dataspace> iocap,
          L4::Cap<L4Re::Mmio_space> mmio_space,
-         int irq_num, bool is_irq_level, L4::Cap<L4::Icu> icu,
+         int irq_num, L4_irq_mode irq_mode, L4::Cap<L4::Icu> icu,
          L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
          L4Re::Util::Object_registry *registry,
          typename Driver::Type type,
@@ -271,7 +271,7 @@ private:
 
   Driver _drv;                  ///< driver instance
   int _irq_num;                 ///< interrupt number
-  bool _is_irq_level;           ///< true: level-triggered interrupt
+  L4_irq_mode _irq_mode;        ///< IRQ mode
   bool _irq_unmask_at_icu;      ///< true: interrupt needs to be ack'd at ICU
   L4::Cap<L4::Irq> _irq;        ///< interrupt capability
   L4::Cap<L4::Icu> _icu;        ///< ICU capability
