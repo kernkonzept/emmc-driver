@@ -49,7 +49,7 @@ static char const *usage_str =
 "Options:\n"
 " -v                   Verbose mode\n"
 " -q                   Be quiet\n"
-" --disable-mode MODE  Disable a certain eMMC mode (can be used more than once\n"
+" --disable-mode MODE  Disable a certain eMMC mode (can be used more than once)\n"
 "                      (MODE is hs26|hs52|hs200|hs400)\n"
 " --client CAP         Add a static client via the CAP capability\n"
 " --ds-max NUM         Specify maximum number of dataspaces the client can register\n"
