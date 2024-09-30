@@ -15,8 +15,13 @@
 
 static Dbg info(Dbg::Info, "util");
 static Dbg trace(Dbg::Trace, "util");
-
-l4_uint64_t Util::tsc_last;
+#if defined(ARCH_x86) || defined(ARCH_amd64)
+l4_uint32_t Util::scaler_tsc_to_us;
+l4_umword_t Util::cpu_freq_khz;
+#elif defined(ARCH_arm) || defined(ARCH_arm64)
+l4_uint32_t Util::generic_timer_freq;
+#endif
+bool Util::tsc_init_success;
 
 std::string
 Util::readable_size(l4_uint64_t size)
@@ -56,11 +61,61 @@ Util::readable_freq(l4_uint32_t freq)
     }
 }
 
+void
+Util::tsc_init()
+{
+#if defined(ARCH_arm)
+
+  // Read from virtual counter of ARM generic timer.
+  l4_uint32_t v;
+  asm volatile ("mrc p15, 0, %0, c14, c0, 0": "=r" (v));
+  generic_timer_freq = v;
+  tsc_init_success = true;
+
+#elif defined(ARCH_arm64)
+
+  // Read from virtual counter of ARM generic timer.
+  l4_uint64_t v;
+  asm volatile("mrs %0, CNTFRQ_EL0": "=r" (v));
+  generic_timer_freq = v;
+  tsc_init_success = true;
+
+#elif defined(ARCH_x86) || defined(ARCH_amd64)
+
+  auto muldiv = [](l4_uint32_t a, l4_uint32_t mul, l4_uint32_t div)
+    {
+      l4_uint32_t d;
+      asm ("mull %4 ; divl %3\n\t"
+           :"=a" (a), "=d" (d) :"a" (a), "c" (div), "d" (mul));
+      return a;
+    };
+
+  l4_kernel_info_t const *kip = l4re_kip();
+  if (!kip)
+    return;
+  if (!kip->frequency_cpu || kip->frequency_cpu >= 50'000'000U)
+    return;
+
+  cpu_freq_khz = kip->frequency_cpu;
+
+  // See also l4re-core/l4util/l4_tsc_init().
+  // scaler = (2^30 * 4'000) / (Hz / 1000) = (2^32 * 1'000'000) / Hz
+  scaler_tsc_to_us = muldiv(1U << 30, 4000, cpu_freq_khz);
+
+  tsc_init_success = true;
+
+#else
+
+  // n/a
+
+#endif
+}
+
 bool
 Util::poll(l4_cpu_time_t us, Util::Poll_timeout_handler handler, char const *s)
 {
   info.printf("Waiting for '%s'...\n", s);
-  l4_uint64_t time = Util::read_tsc();
+  l4_uint64_t time = read_tsc();
   if (!handler())
     {
       auto *kip = l4re_kip();
@@ -77,13 +132,26 @@ Util::poll(l4_cpu_time_t us, Util::Poll_timeout_handler handler, char const *s)
         }
     }
 
-  time = Util::read_tsc() - time;
-  if (Util::freq_tsc())
+  time = read_tsc() - time;
+  if (freq_tsc_hz())
     {
-      l4_uint64_t us = time * 1000000 / Util::freq_tsc();
+      l4_uint64_t us = tsc_to_us(time);
       info.printf("...done %s(%lluus).\n", us >= 10 ? "\033[31;1m" : "", us);
     }
   else
     info.printf("...done.\n");
   return true;
+}
+
+void
+Util::busy_wait_until(l4_uint64_t until)
+{
+  while (tsc_to_us(read_tsc() < until))
+    l4_barrier();
+}
+
+void
+Util::busy_wait_us(l4_uint64_t us)
+{
+  busy_wait_until(tsc_to_us(read_tsc()) + us);
 }

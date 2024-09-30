@@ -455,7 +455,7 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
     Dev_usdhc,          // i.MX8 uSDHC
     Dev_sdhi_emu,       // RCar3 SDHI -- emulator
     Dev_sdhi_rcar3,     // RCar3 SDHI -- bare metal
-    Dev_bcm2711,        // Broadcom Bcm2711-emmc2
+    Dev_bcm2711,        // Broadcom Bcm2711-emmc2 on RPI4
   };
   Dev_type dev_type = Dev_unknown;
 
@@ -703,13 +703,18 @@ main(int argc, char *const *argv)
 {
   Dbg::set_level(3);
 
-  int arg_idx = parse_args(argc, argv);
-  if (arg_idx < 0)
+  if (int arg_idx = parse_args(argc, argv) < 0)
     return arg_idx;
 
   info.printf("Emmc driver says hello.\n");
 
-  info.printf("TSC frequency of %lluHz\n", Util::freq_tsc());
+  Util::tsc_init();
+
+  if (Util::tsc_available())
+    info.printf("TSC frequency of %s.\n",
+                Util::readable_freq(Util::freq_tsc_hz()).c_str());
+  else
+    info.printf("Fine-grained clock not available!\n");
 
   Block_device::Errand::set_server_iface(&server);
   setup_hardware();

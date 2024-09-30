@@ -21,10 +21,24 @@ namespace Emmc {
 
 typedef std::function<void(bool)> Receive_irq;
 
-template <class Hw_drv>
-class Drv
+struct Drv_base
 {
-public:
+  void stats_wait_start()
+  { _time_sleep -= Util::read_tsc(); }
+
+  void stats_wait_done()
+  { _time_sleep += Util::read_tsc(); }
+
+  void delay(unsigned ms);
+
+  // Statistics
+  l4_uint64_t _time_busy = 0;
+  l4_uint64_t _time_sleep = 0;
+};
+
+template <class Hw_drv>
+struct Drv : public Drv_base
+{
   using Hw_regs = L4drivers::Register_block<32>;
 
   explicit Drv(L4::Cap<L4Re::Dataspace> iocap,
@@ -90,19 +104,6 @@ public:
     return false;
   }
 
-  void stats_wait_start()
-  { _time_sleep -= Util::read_tsc(); }
-
-  void stats_wait_done()
-  { _time_sleep += Util::read_tsc(); }
-
-  void delay(unsigned ms)
-  {
-    stats_wait_start();
-    l4_ipc_sleep_ms(ms);
-    stats_wait_done();
-  }
-
   /** Return true if a bounce buffer was provided for this driver instance. */
   bool provided_bounce_buffer() const
   { return _bb_size != 0; }
@@ -127,10 +128,6 @@ public:
   L4Re::Dma_space::Dma_addr _bb_phys;   ///< Bounce buffer: DMA address.
   l4_addr_t _bb_virt = 0;               ///< Bounce buffer: virtual address.
   l4_size_t _bb_size = 0;               ///< Bounce buffer: size.
-
-  // Statistics
-  l4_uint64_t _time_busy = 0;
-  l4_uint64_t _time_sleep = 0;
 };
 
 }; // namespace Emmc

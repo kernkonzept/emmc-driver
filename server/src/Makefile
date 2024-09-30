@@ -5,6 +5,7 @@ TARGET  = emmc-drv
 SRC_CC  = main.cc \
 	  cmd.cc \
 	  cpg.cc \
+	  drv.cc \
 	  drv_sdhci.cc \
 	  drv_sdhi.cc \
 	  mmc.cc \
