@@ -138,21 +138,9 @@ private:
   /**
    * Base class for `Reg<offs>` that implements an optional write delay
    */
-  class Reg_write_delay
+  struct Reg_write_delay
   {
-  public:
-    static void set_write_delay(int delay) { _write_delay = delay; }
-    static void reset_write_delay() { _write_delay = 0; }
-
-  protected:
-    static void write_delay()
-    {
-      if (_write_delay)
-        l4_ipc_sleep_ms(_write_delay);
-    }
-
-  private:
-    static int _write_delay;
+    static void write_delayed(Sdhci *sdhci, Regs offs, l4_uint32_t val);
   };
 
   /**
@@ -164,17 +152,23 @@ private:
    * assignment to the device register is stored in the `offs` template
    * parameter.
    */
-  template <enum Regs offs>
+  template <Regs offs>
   struct Reg : public Reg_write_delay
   {
     explicit Reg() : raw(0) {}
-    explicit Reg(Hw_regs const &regs) : raw(regs[offs]) {}
-    explicit Reg(l4_uint32_t v) : raw(v) {}
-    l4_uint32_t read(Hw_regs const &regs) { raw = regs[offs]; return raw; }
-    void write(Hw_regs &regs)
+    explicit Reg(Sdhci const *sdhci)
+    : raw(sdhci->_regs[offs])
     {
-      regs[offs] = raw;
-      write_delay();
+    }
+    explicit Reg(l4_uint32_t v) : raw(v) {}
+    l4_uint32_t read(Sdhci const *sdhci)
+    {
+      raw = sdhci->_regs[offs];
+      return raw;
+    }
+    void write(Sdhci *sdhci)
+    {
+      write_delayed(sdhci, offs, raw);
     }
     l4_uint32_t raw;
   };
@@ -1026,7 +1020,7 @@ public:
   {
     if (_type == Type::Usdhc)
       {
-        Reg_host_ctrl_cap cc(_regs);
+        Reg_host_ctrl_cap cc(this);
         return    (timing & Mmc::Uhs_sdr12) // always supported
                || (timing & Mmc::Uhs_sdr25) // always supported
                || ((timing & Mmc::Uhs_sdr50) && cc.sdr50_support())
@@ -1035,7 +1029,7 @@ public:
       }
     else
       {
-        Reg_cap2_sdhci c2(_regs);
+        Reg_cap2_sdhci c2(this);
         return    (timing & Mmc::Uhs_sdr12) // always supported
                || (timing & Mmc::Uhs_sdr25) // always supported
                || ((timing & Mmc::Uhs_sdr50) && c2.sdr50_support())
@@ -1067,8 +1061,8 @@ public:
   bool card_busy() const
   {
     if (_type == Type::Iproc)
-      return !Reg_pres_state(_regs).dat0lsl();
-    return !Reg_pres_state(_regs).d0lsl();
+      return !Reg_pres_state(this).dat0lsl();
+    return !Reg_pres_state(this).d0lsl();
   }
 
   /** Return supported power values by the controller. */
@@ -1105,7 +1099,7 @@ private:
 
   /** Return string containing controller capabilities. */
   std::string str_caps() const
-  { return Reg_host_ctrl_cap(_regs).str_caps(); }
+  { return Reg_host_ctrl_cap(this).str_caps(); }
 
   /** Submit command to controller. */
   void cmd_submit(Cmd *cmd);
@@ -1160,6 +1154,27 @@ private:
   Dbg info;
   Dbg trace;
   Dbg trace2;
+
+  /**
+   * Wait until _write_delay microseconds have been passed since the last write
+   * operation.
+   */
+  void write_delay()
+  {
+    Util::busy_wait_until(_write_delay_last_reg_write + _write_delay);
+  }
+
+  /**
+   * Record the time when the last write operation has been performed.
+   */
+  void update_last_write()
+  {
+    _write_delay_last_reg_write = Util::tsc_to_us(Util::read_tsc());
+  }
+
+  l4_uint32_t _write_delay = 0;
+  l4_uint64_t _write_delay_last_reg_write = 0;
+
 }; // class Sdhci
 
 } // namespace Emmc
