@@ -38,10 +38,31 @@ Sdhci::Sdhci(int nr,
   trace2(Dbg::Trace2, "sdhci", nr)
 {
   trace.printf("Assuming %s eMMC controller.\n", type_name(type));
+
   Reg_cap1_sdhci cap1(this);
+  if (_type == Type::Iproc)
+    {
+      // Fine-grained clock required for Reg_write_delay::write_delayed().
+      if (!Util::tsc_available())
+        L4Re::throw_error(-L4_EINVAL, "Iproc requires fine-grained clock");
+
+      _write_delay = 10; // 2.5 SD clock write cycles @ 400 KHz
+      if (cap1.base_freq() > 0) // field limits frequency to 255 MHz
+        {
+          Reg_sys_ctrl sc(this);
+
+          _host_clock = 1'000'000 * cap1.base_freq();
+          l4_uint32_t sd_clock = _host_clock / sc.clock_base_divider10();
+          _write_delay = (4'000'000 + sd_clock - 1) / sd_clock;
+          warn.printf("\033[33mActually using host clock of %s.\033[m\n",
+              Util::readable_freq(host_clock).c_str());
+        }
+    }
+
   info.printf("SDHCI controller capabilities: %08x (%d-bit). SDHCI version %s.\n",
               cap1.raw, cap1.bit64_v3() ? 64 : 32,
               Reg_host_version(this).spec_version());
+
   if (cap1.bit64_v3())
     _adma2_64 = true;
 }
@@ -102,6 +123,18 @@ Sdhci::init()
       Reg_prot_ctrl pc(this);
       pc.dmasel() = dma_adma2() ? pc.Dma_adma2 : pc.Dma_simple;
       pc.write(this);
+
+      Reg_tuning_ctrl tc(this);
+      if (Usdhc_std_tuning)
+        {
+          tc.std_tuning_en() = 1;
+          tc.tuning_start_tap() = 20; // XXX Linux device tree: "tuning-start-tap"
+          tc.tuning_step() = 2;       // XXX Linux device tree: "tuning-step"
+          tc.disable_crc_on_tuning() = 1;
+        }
+      else
+        tc.std_tuning_en() = 0;
+      tc.write(this);
     }
   else
     {
@@ -110,12 +143,12 @@ Sdhci::init()
           sc.raw = 0;
           sc.icen() = 1;
           sc.write(this);
-          Util::poll(10000, [this] { return !!Reg_sys_ctrl(this).icst(); },
+          Util::poll(10'000, [this] { return !!Reg_sys_ctrl(this).icst(); },
                      "Clock stable");
           sc.sdcen() = 1;
           sc.pllen() = 1;
           sc.write(this);
-          Util::poll(10000, [this] { return !!Reg_sys_ctrl(this).icst(); },
+          Util::poll(10'000, [this] { return !!Reg_sys_ctrl(this).icst(); },
                      "PLL clock stable");
         }
       else
@@ -137,21 +170,6 @@ Sdhci::init()
         }
       hc.dmamod() = dma_adma2() ? hc.Adma32 : hc.Sdma;
       hc.write(this);
-    }
-
-  if (_type == Type::Usdhc)
-    {
-      Reg_tuning_ctrl tc(this);
-      if (Usdhc_std_tuning)
-        {
-          tc.std_tuning_en() = 1;
-          tc.tuning_start_tap() = 20; // XXX Linux device tree: "tuning-start-tap"
-          tc.tuning_step() = 2;       // XXX Linux device tree: "tuning-step"
-          tc.disable_crc_on_tuning() = 1;
-        }
-      else
-        tc.std_tuning_en() = 0;
-      tc.write(this);
     }
 }
 
@@ -185,8 +203,9 @@ void
 Sdhci::handle_irq_cmd(Cmd *cmd, Reg_int_status is)
 {
   Reg_int_status is_ack;
-  trace.printf("handle_irq_cmd: is = %08x, isen = %08x\n",
-               is.raw, Reg_int_status_en().read(this));
+  if (trace.is_active()) // otherwise don't read Reg_int_status
+    trace.printf("handle_irq_cmd: is = %08x, isen = %08x\n",
+                 is.raw, Reg_int_status_en().read(this));
   if (is.ctoe())
     {
       is_ack.ctoe() = 1;
@@ -256,9 +275,9 @@ void
 Sdhci::handle_irq_data(Cmd *cmd, Reg_int_status is)
 {
   Reg_int_status is_ack;
-
-  trace.printf("handle_irq_data: is = %08x, isen = %08x\n",
-               is.raw, Reg_int_status_en().read(this));
+  if (trace.is_active()) // otherwise don't read Reg_int_status
+    trace.printf("handle_irq_data: is = %08x, isen = %08x\n",
+                 is.raw, Reg_int_status_en().read(this));
   if (is.data_error())
     {
       is_ack.copy_data_error(is);
@@ -360,18 +379,23 @@ Sdhci::cmd_submit(Cmd *cmd)
 
   if (cmd->flags.has_data())
     {
-      if (_type == Type::Usdhc)
+      switch (_type)
         {
-          Reg_wtmk_lvl wml(this);
-          wml.rd_wml() = Reg_wtmk_lvl::Wml_dma;
-          wml.wr_wml() = Reg_wtmk_lvl::Wml_dma;
-          wml.rd_brst_len() = Reg_wtmk_lvl::Brst_dma;
-          wml.wr_brst_len() = Reg_wtmk_lvl::Brst_dma;
-          wml.write(this);
-          mc.ac12en() = Auto_cmd12 && cmd->flags.inout_cmd12();
+        case Type::Usdhc:
+          {
+            Reg_wtmk_lvl wml(this);
+            wml.rd_wml() = Reg_wtmk_lvl::Wml_dma;
+            wml.wr_wml() = Reg_wtmk_lvl::Wml_dma;
+            wml.rd_brst_len() = Reg_wtmk_lvl::Brst_dma;
+            wml.wr_brst_len() = Reg_wtmk_lvl::Brst_dma;
+            wml.write(this);
+            mc.ac12en() = Auto_cmd12 && cmd->flags.inout_cmd12();
+            break;
+          }
+        default:
+          xt.ac12en() = Auto_cmd12 && cmd->flags.inout_cmd12();
+          break;
         }
-      else
-        xt.ac12en() = Auto_cmd12 && cmd->flags.inout_cmd12();
 
       if (dma_adma2())
         {
@@ -453,17 +477,31 @@ Sdhci::cmd_submit(Cmd *cmd)
           mc.ac23en() = 0;
         }
       else
-        xt.ac12en() = 0;
+        {
+          xt.ac12en() = 0;
+          xt.ac23en() = 0;
+        }
     }
 
   if (   cmd->cmd == Mmc::Cmd19_send_tuning_block
       || cmd->cmd == Mmc::Cmd21_send_tuning_block)
     {
       l4_uint8_t blksize = cmd->cmd == Mmc::Cmd19_send_tuning_block ? 64 : 128;
-      Reg_blk_att ba;
-      ba.blkcnt() = 1;
-      ba.blksize() = blksize;
-      ba.write(this);
+      if (_type == Type::Iproc)
+        {
+          Reg_blk_size bz;
+          bz.blksize() = blksize;
+          bz.blkcnt() = 0; // ???
+          bz.sdma_buf_bndry() = 7;
+          bz.write(this);
+        }
+      else
+        {
+          Reg_blk_att ba;
+          ba.blkcnt() = 1;
+          ba.blksize() = blksize;
+          ba.write(this);
+        }
 
       Reg_wtmk_lvl wml(this);
       wml.rd_wml() = blksize;
@@ -472,26 +510,38 @@ Sdhci::cmd_submit(Cmd *cmd)
       wml.wr_brst_len() = Reg_wtmk_lvl::Brst_dma;
       wml.write(this);
 
-      if (_type == Type::Usdhc)
+      switch (_type)
         {
-          mc.dmaen() = 0;
-          mc.bcen() = 0;
-          mc.ac12en() = 0;
-          mc.dtdsel() = 1;
-          mc.msbsel() = 0;
-          mc.ac23en() = 0;
-          mc.auto_tune_en() = 1;
-          mc.fbclk_sel() = 1;
+        case Type::Usdhc:
+          {
+            mc.dmaen() = 0;
+            mc.bcen() = 0;
+            mc.ac12en() = 0;
+            mc.dtdsel() = 1;
+            mc.msbsel() = 0;
+            mc.ac23en() = 0;
+            mc.auto_tune_en() = 1;
+            mc.fbclk_sel() = 1;
 
-          Reg_autocmd12_err_status es(this);
-          es.smp_clk_sel() = 0;
-          es.execute_tuning() = 1;
-          es.write(this);
-        }
-      else
-        {
+            Reg_autocmd12_err_status es(this);
+            es.smp_clk_sel() = 0;
+            es.execute_tuning() = 1;
+            es.write(this);
+            break;
+          }
+        case Type::Iproc:
+          {
+            Reg_autocmd12_err_status es(this);
+            es.smp_clk_sel() = 0;
+            es.execute_tuning() = 1;
+            es.write(this);
+            xt.dtdsel() = 1;
+            break;
+          }
+        default:
           xt.ac12en() = 0;
           xt.dtdsel() = 1;
+          break;
         }
       xt.dpsel() = 1;
     }
@@ -500,10 +550,12 @@ Sdhci::cmd_submit(Cmd *cmd)
     {
       if (dma_adma2())
         {
-          if (_type == Type::Usdhc)
+          switch (_type)
             {
+            case Type::Usdhc:
               if (cmd->flags.auto_cmd23())
                 {
+                  assert(auto_cmd23());
                   mc.ac23en() = 1;
                   while (Reg_pres_state(this).dla())
                     ;
@@ -511,6 +563,19 @@ Sdhci::cmd_submit(Cmd *cmd)
                 }
               else
                 mc.ac23en() = 0;
+              break;
+            case Type::Iproc:
+              if (cmd->flags.auto_cmd23())
+                {
+                  assert(auto_cmd23());
+                  xt.ac23en() = 1;
+                  Reg_cmd_arg2(cmd->blockcnt).write(this);
+                }
+              else
+                xt.ac23en() = 0;
+              break;
+            default:
+              break; // This cannot happen, see auto_cmd23()
             }
           Reg_adma_sys_addr_lo(dma_addr & 0xffffffff).write(this);
           Reg_adma_sys_addr_hi(dma_addr >> 32).write(this);
@@ -549,6 +614,7 @@ Sdhci::cmd_submit(Cmd *cmd)
 
   if (_type == Type::Usdhc)
     mc.write(this);
+
   xt.write(this);
 
   cmd->status = Cmd::Progress_cmd;
@@ -693,11 +759,45 @@ Sdhci::set_clock_and_timing(l4_uint32_t freq, Mmc::Timing timing, bool strobe)
       return;
     }
 
-  if (timing == Mmc::Mmc_hs400 || timing == Mmc::Uhs_ddr50
+  if (   timing == Mmc::Mmc_hs400
+      || timing == Mmc::Uhs_ddr50
       || timing == Mmc::Mmc_ddr52)
     _ddr_active = true;
   else
     _ddr_active = false;
+  if (_type == Type::Iproc)
+    {
+      Reg_host_ctrl hc(this);
+      if (   timing == Mmc::Mmc_hs400
+          || timing == Mmc::Mmc_hs200
+          || timing == Mmc::Mmc_ddr52
+          || timing == Mmc::Uhs_ddr50
+          || timing == Mmc::Uhs_sdr104
+          || timing == Mmc::Uhs_sdr50
+          || timing == Mmc::Uhs_sdr25
+          || timing == Mmc::Hs)
+        hc.hispd() = 1;
+      else
+        hc.hispd() = 0;
+      hc.write(this);
+
+      Reg_host_ctrl2 hc2(this);
+      if (timing == Mmc::Mmc_hs200 || timing == Mmc::Uhs_sdr104)
+        hc2.uhsmode() = Reg_host_ctrl2::Ctrl_uhs_sdr104;
+      else if (timing == Mmc::Uhs_sdr12)
+        hc2.uhsmode() = Reg_host_ctrl2::Ctrl_uhs_sdr12;
+      else if (timing == Mmc::Uhs_sdr25)
+        hc2.uhsmode() = Reg_host_ctrl2::Ctrl_uhs_sdr25;
+      else if (timing == Mmc::Uhs_sdr50)
+        hc2.uhsmode() = Reg_host_ctrl2::Ctrl_uhs_sdr50;
+      else if (timing == Mmc::Uhs_ddr50 || timing == Mmc::Mmc_ddr52)
+        hc2.uhsmode() = Reg_host_ctrl2::Ctrl_uhs_ddr50;
+      else if (timing == Mmc::Mmc_hs400)
+        hc2.uhsmode() = Reg_host_ctrl2::Ctrl_hs400;
+      else
+        hc2.uhsmode() = 0;
+      hc2.write(this);
+    }
   set_clock(freq);
   if (_type == Type::Usdhc)
     {
@@ -746,44 +846,81 @@ Sdhci::set_clock_and_timing(l4_uint32_t freq, Mmc::Timing timing, bool strobe)
 void
 Sdhci::set_clock(l4_uint32_t freq)
 {
-  Reg_sys_ctrl sc(this);
-  sc.icen() = 0;
-  if (_type != Type::Iproc)
-    sc.icst() = 0;
-  sc.sdcen() = 0;
-  sc.dvs() = 0;
-  sc.sdclkfs() = 0;
-  sc.write(this);
-
-  l4_uint32_t ddr_pre_div = _ddr_active ? 2 : 1;
-  l4_uint32_t pre_div = 1;
-  l4_uint32_t div = 1;
-  while (_host_clock / (16 * pre_div * ddr_pre_div) > freq && pre_div < 256)
-    pre_div <<= 1;
-  while (_host_clock / (div * pre_div * ddr_pre_div) > freq && div < 16)
-    ++div;
-  pre_div >>= 1;
-  --div;
-
-  sc.read(this);
-  sc.icen() = 1;
-  if (_type == Type::Iproc)
+  switch (_type)
     {
-      sc.write(this);
-      Util::poll(10000, [this] { return !!Reg_sys_ctrl(this).icst(); },
-                 "Clock stable");
-    }
-  else
-    sc.icst() = 1;
-  sc.sdcen() = 1;
-  sc.dvs() = div;
-  sc.sdclkfs() = pre_div;
-  sc.write(this);
+    case Type::Iproc:
+      {
+        Reg_sys_ctrl sc;
+        sc.write(this);
 
-  info.printf("\033[33mSet clock to %s%s (host=%s, divisor=%d).\033[m\n",
-              Util::readable_freq(freq).c_str(), _ddr_active ? " (DDR)" : "",
-              Util::readable_freq(_host_clock).c_str(),
-              _ddr_active ? sc.clock_divisor_ddr() : sc.clock_divisor_sdr());
+        l4_uint32_t div;
+        if (_host_clock <= freq)
+          div = 1;
+        else
+          for (div = 2; div < 2046; div += 2)
+            if ((_host_clock / div) <= freq)
+              break;
+        div >>= 1;
+
+        sc.icen() = 1;
+        sc.clk_freq8() = div & 0xff;
+        sc.clk_freq_ms2() = (div >> 8) & 0x3;
+        sc.write(this);
+
+        _write_delay = (4'000'000 + freq - 1) / freq;
+
+        // Minimum waiting time!
+        delay(5);
+        // Timeout: max 150ms (SD host A2 3.2.1)
+        Util::poll(150'000, [this] { return !!Reg_sys_ctrl(this).icst(); },
+                   "Clock stable");
+
+        sc.read(this);
+        sc.sdcen() = 1;
+        sc.write(this);
+
+        info.printf("\033[33mSet clock to %s%s (host=%s, divider=%d).\033[m\n",
+                    Util::readable_freq(freq).c_str(), _ddr_active ? " (DDR)" : "",
+                    Util::readable_freq(_host_clock).c_str(),
+                    sc.clock_base_divider10());
+        break;
+      }
+    default:
+      {
+        // this code is primarily for uSDHC
+        Reg_sys_ctrl sc(this);
+        sc.icen() = 0;
+        sc.icst() = 0;
+        sc.sdcen() = 0;
+        sc.dvs() = 0;
+        sc.sdclkfs() = 0;
+        sc.write(this);
+
+        l4_uint32_t ddr_pre_div = _ddr_active ? 2 : 1;
+        l4_uint32_t pre_div = 1;
+        l4_uint32_t div = 1;
+        while (_host_clock / (16 * pre_div * ddr_pre_div) > freq && pre_div < 256)
+          pre_div <<= 1;
+        while (_host_clock / (div * pre_div * ddr_pre_div) > freq && div < 16)
+          ++div;
+        pre_div >>= 1;
+        --div;
+
+        sc.read(this);
+        sc.icen() = 1;
+        sc.icst() = 1;
+        sc.sdcen() = 1;
+        sc.dvs() = div;
+        sc.sdclkfs() = pre_div;
+        sc.write(this);
+
+        info.printf("\033[33mSet clock to %s%s (host=%s, divider=%d).\033[m\n",
+                    Util::readable_freq(freq).c_str(), _ddr_active ? " (DDR)" : "",
+                    Util::readable_freq(_host_clock).c_str(),
+                    _ddr_active ? sc.clock_divider_ddr() : sc.clock_divider_sdr());
+        break;
+      }
+    }
 }
 
 void
@@ -806,18 +943,27 @@ Sdhci::set_voltage(Mmc::Voltage voltage)
       return;
     }
 
-  if (_type == Type::Usdhc)
+  switch (_type)
     {
-      Reg_vend_spec vs(this);
-      if (voltage == Mmc::Voltage_330)
-        vs.vselect() = 0;
-      else
-        vs.vselect() = 1;
-      vs.write(this);
-    }
-  else
-    {
-      // 0x3E: SDHCI: Host Control 2 Register bit 3
+    case Type::Usdhc:
+      {
+        Reg_vend_spec vs(this);
+        if (voltage == Mmc::Voltage_330)
+          vs.vselect() = 0;
+        else
+          vs.vselect() = 1;
+        vs.write(this);
+        break;
+      }
+    case Type::Iproc:
+      {
+        Reg_host_ctrl2 hc2(this);
+        hc2.v18() = 1;
+        hc2.write(this);
+        break;
+      }
+    default:
+      break; // 0x3E: SDHCI: Host Control 2 Register bit 3
     }
 
   info.printf("\033[33mSet voltage to %s.\033[m\n", Mmc::str_voltage(voltage));
@@ -833,7 +979,7 @@ Sdhci::clock_disable()
       vs.frc_sdclk_on() = 0;
       vs.write(this);
 
-      Util::poll(10000, [this] { return !!Reg_pres_state(this).sdoff(); },
+      Util::poll(10'000, [this] { return !!Reg_pres_state(this).sdoff(); },
                  "Clock gate off");
     }
 }
@@ -847,7 +993,7 @@ Sdhci::clock_enable()
       vs.frc_sdclk_on() = 1;
       vs.write(this);
 
-      Util::poll(10000, [this] { return !!Reg_pres_state(this).sdstb(); },
+      Util::poll(10'000, [this] { return !!Reg_pres_state(this).sdstb(); },
                  "Clock stable after enable");
     }
 }

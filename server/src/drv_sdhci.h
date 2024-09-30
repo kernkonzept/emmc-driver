@@ -15,10 +15,11 @@
 #include "drv.h"
 #include "inout_buffer.h"
 
-/**
+/*
  * SDHCI:
- *  SD Specifications Part A2:
- *  SD Host Controller, Simplified Specification
+ * ``SD Specifications Part A2: SD Host Controller, Simplified Specification´´
+ * iproc/arasan:
+ *  ``BROADCOM BCM2835 ARM Peripherals / External Mass Media Controller´´
  */
 
 namespace Emmc {
@@ -31,18 +32,18 @@ public:
   enum class Type
   {
     Sdhci, ///< Sdhci driver
-    Usdhc, ///< Sdhci driver with uSDHC modifications
-    Iproc, ///< Sdhci driver with iproc modifications (e.g. bcm2711)
+    Usdhc, ///< Sdhci driver with uSDHC modifications (NXP eSDHC i.MX)
+    Iproc, ///< Sdhci driver with iproc/arasan modifications (e.g. bcm2711)
   };
 
   static bool auto_cmd12()
   { return Auto_cmd12; }
 
   bool auto_cmd23() const
-  { return (_type == Type::Usdhc) && Auto_cmd23; }
+  { return (_type == Type::Usdhc || _type == Type::Iproc) && Auto_cmd23; }
 
   bool dma_adma2() const
-  { return (_type != Type::Iproc) && Dma_adma2; }
+  { return Dma_adma2; }
 
 private:
   enum
@@ -113,6 +114,7 @@ private:
     Int_status_en         = 0x34, ///< Interrupt Status Enable
     Int_signal_en         = 0x38, ///< Interrupt Signal Enable
     Autocmd12_err_status  = 0x3c, ///< Auto CMD12 Error Status
+    Host_ctrl2            = 0x3c, ///< Host Control 2 (iproc)
     Host_ctrl_cap         = 0x40, ///< Host Controller Capabilities (uSDHC)
     Cap1_sdhci            = 0x40, ///< Capabilities Register (SDHCI)
     Wtmk_lvl              = 0x44, ///< Watermark Level
@@ -359,7 +361,7 @@ private:
     CXX_BITFIELD_MEMBER(0, 0, lctl, raw);      ///< LED control
   };
 
-  /// 0x28: Host Control (SDHCI)
+  /// 0x28: Host Control (SDHCI, iproc)
   struct Reg_host_ctrl : public Reg<Host_ctrl>
   {
     using Reg::Reg;
@@ -428,12 +430,22 @@ private:
     l4_uint32_t data_timeout_factor() const
     { return 1U << (14 + dtocv()); }
 
+    // >>> uSDHC
     CXX_BITFIELD_MEMBER(8, 15, sdclkfs, raw); ///< SDCLK frequency select
     CXX_BITFIELD_MEMBER(4, 7, dvs, raw);      ///< Divisor
-    l4_uint32_t clock_divisor_sdr() const
+    l4_uint32_t clock_divider_sdr() const
     { return (sdclkfs() ? sdclkfs() * 2 : 1) * (dvs() + 1); }
-    l4_uint32_t clock_divisor_ddr() const
+    l4_uint32_t clock_divider_ddr() const
     { return (sdclkfs() ? sdclkfs() * 4 : 2) * (dvs() + 1); }
+    // <<< uSDHC
+
+    // >>> SD: 3.00, e.g. iproc
+    CXX_BITFIELD_MEMBER(8, 15, clk_freq8, raw); ///< base divider LSBs
+    CXX_BITFIELD_MEMBER(6, 7, clk_freq_ms2, raw); ///< base divider MSBs
+    CXX_BITFIELD_MEMBER(5, 5, clk_gensel, raw); ///< mode of clock
+    l4_uint32_t clock_base_divider10() const
+    { return clk_freq8() + (clk_freq_ms2() << 8); }
+    // <<< SD: 3.00
 
     // >>> SDHCI
     CXX_BITFIELD_MEMBER(3, 3, pllen, raw);   ///< PLL enable
@@ -458,6 +470,7 @@ private:
     CXX_BITFIELD_MEMBER(18, 18, cebe, raw);  ///< Command end bit error
     CXX_BITFIELD_MEMBER(17, 17, cce, raw);   ///< Command CRC error
     CXX_BITFIELD_MEMBER(16, 16, ctoe, raw);  ///< Command timeout error
+    CXX_BITFIELD_MEMBER(15, 15, err, raw);   ///< An error has occurred (iproc)
     CXX_BITFIELD_MEMBER(14, 14, cqi, raw);   ///< Command queuing interrupt
     CXX_BITFIELD_MEMBER(13, 13, tp, raw);    ///< Tuning pass
     CXX_BITFIELD_MEMBER(12, 12, rte, raw);   ///< Re-tuning event
@@ -620,6 +633,32 @@ private:
     CXX_BITFIELD_MEMBER(0, 0, ac12ne, raw);  ///< Auto CMD12 not executed
   };
 
+  /// 0x3c: Control2 (iproc)
+  struct Reg_host_ctrl2 : public Reg<Host_ctrl2>
+  {
+    using Reg::Reg;
+
+    CXX_BITFIELD_MEMBER(23, 23, tuned, raw);
+    CXX_BITFIELD_MEMBER(22, 22, tuneon, raw);
+    CXX_BITFIELD_MEMBER(19, 19, v18, raw);      ///< 1.8V select?
+    CXX_BITFIELD_MEMBER(16, 18, uhsmode, raw);
+    enum
+    {
+      Ctrl_uhs_sdr12 = 0,
+      Ctrl_uhs_sdr25 = 1,
+      Ctrl_uhs_sdr50 = 2,
+      Ctrl_uhs_sdr104 = 3,
+      Ctrl_uhs_ddr50 = 4,
+      Ctrl_hs400 = 5,
+    };
+    CXX_BITFIELD_MEMBER(7, 7, notc12_err, raw); ///< Auto CMD12 error
+    CXX_BITFIELD_MEMBER(4, 4, acbad_err, raw);  ///< ACMD: Command index error
+    CXX_BITFIELD_MEMBER(3, 3, acend_err, raw);  ///< ACMD: End bit not 1
+    CXX_BITFIELD_MEMBER(2, 2, accrc_err, raw);  ///< ACMD: Command CRC error
+    CXX_BITFIELD_MEMBER(1, 1, acto_err, raw);   ///< ACMD: Timeout
+    CXX_BITFIELD_MEMBER(0, 0, acnox_err, raw);  ///< ACMD: Not executed, error
+  };
+
   /// 0x40: Host Controller Capabilities (uSDHC)
   /// i.MX8 QM: 0x07f3b407.
   struct Reg_host_ctrl_cap : public Reg<Host_ctrl_cap>
@@ -679,7 +718,7 @@ private:
     CXX_BITFIELD_MEMBER(19, 19, adma2s, raw);   ///< ADMA2 support
     CXX_BITFIELD_MEMBER(18, 18, bit8_bus, raw); ///< 8-bit support
     CXX_BITFIELD_MEMBER(16, 17, mbl, raw);      ///< Max block length
-    CXX_BITFIELD_MEMBER(8, 15, base_freq, raw);
+    CXX_BITFIELD_MEMBER(8, 15, base_freq, raw); ///< Base Clock Freq MHz for SD
     CXX_BITFIELD_MEMBER(7, 7, timeout_clock_unit, raw);
     CXX_BITFIELD_MEMBER(0, 5, timeout_clock_freq, raw);
   };
@@ -713,6 +752,12 @@ private:
     CXX_BITFIELD_MEMBER(27, 27, adma2_support, raw);
     CXX_BITFIELD_MEMBER(16, 23, clock_mult, raw);
     CXX_BITFIELD_MEMBER(14, 15, retune_modes, raw);
+    enum
+    {
+      Tuning_mode_1 = 0,
+      Tuning_mode_2 = 1,
+      Tuning_mode_3 = 2,
+    };
     CXX_BITFIELD_MEMBER(13, 13, tune_sdr50, raw);
     CXX_BITFIELD_MEMBER(8, 11, timer_count_retune, raw);
     CXX_BITFIELD_MEMBER(6, 6, driver_type_d_support, raw);
@@ -1018,23 +1063,32 @@ public:
   /** Return true if any of the UHS timings is supported by the controller. */
   bool supp_uhs_timings(Mmc::Timing timing) const
   {
-    if (_type == Type::Usdhc)
+    switch (_type)
       {
-        Reg_host_ctrl_cap cc(this);
-        return    (timing & Mmc::Uhs_sdr12) // always supported
-               || (timing & Mmc::Uhs_sdr25) // always supported
-               || ((timing & Mmc::Uhs_sdr50) && cc.sdr50_support())
-               || ((timing & Mmc::Uhs_sdr104) && cc.sdr104_support())
-               || ((timing & Mmc::Uhs_ddr50) && cc.ddr50_support());
-      }
-    else
-      {
-        Reg_cap2_sdhci c2(this);
-        return    (timing & Mmc::Uhs_sdr12) // always supported
-               || (timing & Mmc::Uhs_sdr25) // always supported
-               || ((timing & Mmc::Uhs_sdr50) && c2.sdr50_support())
-               || ((timing & Mmc::Uhs_sdr104) && c2.sdr104_support())
-               || ((timing & Mmc::Uhs_ddr50) && c2.ddr50_support());
+      case Type::Usdhc:
+        {
+          Reg_host_ctrl_cap cc(this);
+          return    (timing & Mmc::Uhs_sdr12) // always supported
+                 || (timing & Mmc::Uhs_sdr25) // always supported
+                 || ((timing & Mmc::Uhs_sdr50) && cc.sdr50_support())
+                 || ((timing & Mmc::Uhs_sdr104) && cc.sdr104_support())
+                 || ((timing & Mmc::Uhs_ddr50) && cc.ddr50_support());
+        }
+      case Type::Iproc:
+        return   (timing & Mmc::Uhs_sdr12)
+              || (timing & Mmc::Uhs_sdr25)
+              || (timing & Mmc::Uhs_sdr50)
+              || (timing & Mmc::Uhs_sdr104)
+              || (timing & Mmc::Uhs_ddr50);
+      default:
+        {
+          Reg_cap2_sdhci c2(this);
+          return    (timing & Mmc::Uhs_sdr12) // always supported
+                 || (timing & Mmc::Uhs_sdr25) // always supported
+                 || ((timing & Mmc::Uhs_sdr50) && c2.sdr50_support())
+                 || ((timing & Mmc::Uhs_sdr104) && c2.sdr104_support())
+                 || ((timing & Mmc::Uhs_ddr50) && c2.ddr50_support());
+        }
       }
   };
 
@@ -1060,9 +1114,13 @@ public:
   /** Return true if the card is busy. */
   bool card_busy() const
   {
-    if (_type == Type::Iproc)
-      return !Reg_pres_state(this).dat0lsl();
-    return !Reg_pres_state(this).d0lsl();
+    switch (_type)
+      {
+      case Type::Iproc:
+        return !Reg_pres_state(this).dat0lsl();
+      default:
+        return !Reg_pres_state(this).d0lsl();
+      }
   }
 
   /** Return supported power values by the controller. */
@@ -1075,6 +1133,9 @@ public:
   }
 
   void sdio_reset(Cmd *cmd);
+
+  /** Dump all controller registers if 'warn' debug level is enabled. */
+  void dump() const;
 
 private:
   /**
@@ -1093,9 +1154,6 @@ private:
 
   /** Fetch response from controller. */
   void cmd_fetch_response(Cmd *cmd);
-
-  /** Dump all controller registers if 'warn' debug level is enabled. */
-  void dump() const;
 
   /** Return string containing controller capabilities. */
   std::string str_caps() const
@@ -1148,7 +1206,7 @@ private:
   Type _type;                           ///< The specific type of Sdhci.
   bool _ddr_active = false;             ///< True if double-data timing.
   bool _adma2_64 = false;               ///< True if 64-bit ADMA2.
-  l4_uint32_t _host_clock = 400000000;  ///< Reference clock frequency.
+  l4_uint32_t _host_clock;              ///< Reference clock frequency.
 
   Dbg warn;
   Dbg info;

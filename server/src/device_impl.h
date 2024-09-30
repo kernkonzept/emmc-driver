@@ -443,6 +443,7 @@ Device<Driver>::start_device_scan(Errand::Callback const &cb)
   if (!cmd)
     return;
 
+  _drv.set_clock_and_timing(400 * KHz, Mmc::Legacy);
   _drv.sdio_reset(cmd);
 
   _init_thread = std::thread([this, cmd, cb]
@@ -481,8 +482,10 @@ Device<Driver>::start_device_scan(Errand::Callback const &cb)
           cmd_exec(cmd);
 
           if (cmd->status == Cmd::Success)
-            info.printf("Initial SEND_IF_COND response: %08x.\n",
-                        Mmc::Rsp_r7(cmd->resp[0]).raw);
+            info.printf("Initial SEND_IF_COND response: %08x (voltage %saccepted).\n",
+                        Mmc::Rsp_r7(cmd->resp[0]).raw,
+                        Mmc::Rsp_r7(cmd->resp[0]).voltage_accepted()
+                          ? "" : "NOT ");
 
           if (   !power_up_sd(cmd)
               && !power_up_mmc(cmd))
