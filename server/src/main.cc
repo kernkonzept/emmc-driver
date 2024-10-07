@@ -44,7 +44,7 @@ static int max_seg = 64;
 enum { No_partno = -1 };
 
 static char const *usage_str =
-"Usage: %s [-vq] --client CAP <client parameters>]\n"
+"Usage: %s [-vq] --client CAP <client parameters>\n"
 "\n"
 "Options:\n"
 " -v                   Verbose mode\n"
