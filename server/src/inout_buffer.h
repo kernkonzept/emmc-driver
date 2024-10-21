@@ -18,8 +18,6 @@
 
 #include <l4/libblock-device/device.h>
 
-namespace Emmc {
-
 class Inout_buffer : public cxx::Ref_obj
 {
 public:
@@ -116,5 +114,3 @@ private:
   L4Re::Dma_space::Dma_addr _paddr;
   L4Re::Dma_space::Direction _dir;
 };
-
-} // namespace Emmc

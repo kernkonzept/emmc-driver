@@ -10,7 +10,9 @@ SRC_CC  = main.cc \
 	  drv_sdhi.cc \
 	  mmc.cc \
 	  mmio.cc \
-	  util.cc
+	  util.cc \
+	  bcm2835-mbox.cc \
+	  bcm2835-soc.cc
 
 REQUIRES_LIBS  := libio-vbus libblock-device libpthread
 
