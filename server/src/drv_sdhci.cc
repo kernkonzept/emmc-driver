@@ -1095,9 +1095,33 @@ Sdhci::set_voltage(Mmc::Voltage voltage)
       }
     case Type::Iproc:
       {
+        l4_uint32_t gpio_set_value;
+        if (voltage == Mmc::Voltage_330)
+          gpio_set_value = 0;
+        else
+          gpio_set_value = 1;
+        bcm2835_soc->set_fw_gpio(Bcm2835_soc::Raspi_exp_gpio_vdd_sd_io_sel,
+                                 gpio_set_value);
+
+        delay(10);
         Reg_host_ctrl2 hc2(this);
-        hc2.v18() = 1;
+        if (voltage == Mmc::Voltage_330)
+          hc2.v18() = 0;
+        else
+          hc2.v18() = 1;
         hc2.write(this);
+        Util::poll(5'000, [this] { return Reg_pres_state(this).hrvs().get(); },
+                   "Host regulator voltage stable");
+
+        Reg_host_ctrl hc(this);
+        if (voltage == Mmc::Voltage_330)
+          hc.voltage_sel() = Reg_host_ctrl::Voltage_33;
+        else
+          hc.voltage_sel() = Reg_host_ctrl::Voltage_18;
+        hc.bus_power() = 0;
+        hc.write(this);
+        hc.bus_power() = 1;
+        hc.write(this);
         break;
       }
     default:
