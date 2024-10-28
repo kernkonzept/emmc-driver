@@ -1097,9 +1097,10 @@ Device<Driver>::power_up_sd(Cmd *cmd)
     _io_buf.dump("Got SSR:", 4, 64);
 
   Mmc::Reg_ssr const ssr(_io_buf.get<l4_uint8_t const>());
-  info.printf("SSR: speed:'%s', UHS_speed:'%s', AU size:%s\n",
+  info.printf("SSR: speed:'%s', UHS_speed:'%s', AU size:%s, cc:%u\n",
               ssr.str_speed_class(), ssr.str_uhs_speed_grade(),
-              Util::readable_size(1U << (12 + ssr.au_size())).c_str());
+              Util::readable_size(1U << (12 + ssr.au_size())).c_str(),
+              ssr.supp_cmd_queue().get());
 
   Mmc::Arg_cmd6_switch_func a6;
   a6.grp1_acc_mode() = a6.Grp1_sdr12;
