@@ -1016,16 +1016,14 @@ Device<Driver>::power_up_sd(Cmd *cmd)
           _drv.set_clock_and_timing(0, Mmc::Legacy);
           _drv.set_voltage(Mmc::Voltage_180);
           _drv.delay(5);
-          _drv.set_clock_and_timing(400 * KHz, Mmc::Legacy);
+          _drv.set_clock_and_timing(400 * KHz, Mmc::Uhs_sdr12);
           _drv.delay(5);
-
           if (_drv.card_busy())
             L4Re::throw_error(-L4_EINVAL, "Still busy after set voltage");
 
           trace.printf("Power switch to 1.8V took %llums.\n",
                        Util::tsc_to_ms(Util::read_tsc() - now));
           v18 = true;
-
           _drv.delay(5);
         }
       else
@@ -1128,6 +1126,24 @@ Device<Driver>::power_up_sd(Cmd *cmd)
   Mmc::Timing mmc_timing;
   Mmc::Arg_cmd6_switch_func::Grp1_acc_mode a6_timing;
   l4_uint32_t freq;
+  if (!v18 && (sf.acc_mode_sdr104() || sf.acc_mode_ddr50() || sf.acc_mode_sdr50()))
+    {
+      // See Physical Layer Simplified Specification Version 8.00 / 4.3.10.3:
+      // It may happen that a card has already been switched into in 1.8V mode.
+      warn.printf("\033[31mCard apparently already in 1.8V mode.\033[m\n");
+
+      _drv.delay(2);
+      _drv.set_clock_and_timing(0, Mmc::Legacy);
+      _drv.set_voltage(Mmc::Voltage_180);
+      _drv.delay(5);
+      _drv.set_clock_and_timing(400 * KHz, Mmc::Uhs_sdr12);
+      _drv.delay(5);
+      if (_drv.card_busy())
+        L4Re::throw_error(-L4_EINVAL, "Still busy after set voltage");
+      v18 = true;
+      _drv.delay(5);
+    }
+
   if (v18 && _drv.supp_uhs_timings(Mmc::Uhs_sdr104) && sf.acc_mode_sdr104())
     {
       mmc_timing = Mmc::Uhs_sdr104;
