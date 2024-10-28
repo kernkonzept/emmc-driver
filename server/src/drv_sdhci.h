@@ -1184,12 +1184,6 @@ public:
                  || ((timing & Mmc::Uhs_sdr104) && cc.sdr104_support())
                  || ((timing & Mmc::Uhs_ddr50) && cc.ddr50_support());
         }
-      case Type::Iproc:
-        return   (timing & Mmc::Uhs_sdr12)
-              || (timing & Mmc::Uhs_sdr25)
-              || (timing & Mmc::Uhs_sdr50)
-              || (timing & Mmc::Uhs_sdr104)
-              || (timing & Mmc::Uhs_ddr50);
       default:
         {
           Reg_cap2_sdhci c2(this);

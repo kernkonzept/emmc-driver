@@ -1172,13 +1172,13 @@ Device<Driver>::power_up_sd(Cmd *cmd)
     {
       mmc_timing = Mmc::Uhs_sdr12;
       a6_timing = Mmc::Arg_cmd6_switch_func::Grp1_sdr12;
-      freq = 50 * MHz;
+      freq = 25 * MHz;
     }
   else
     {
       mmc_timing = Mmc::Hs;
       a6_timing = Mmc::Arg_cmd6_switch_func::Grp1_sdr12;
-      freq = 50 * MHz;
+      freq = 25 * MHz;
     }
 
   // Bus width -- also for HS!
