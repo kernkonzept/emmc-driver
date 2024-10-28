@@ -27,7 +27,7 @@ Sdhci::Sdhci(int nr,
              l4_uint32_t host_clock, Receive_irq receive_irq)
 : Drv(iocap, mmio_space, mmio_base, receive_irq),
   _adma2_desc_mem("sdhci_adma_buf", 4096, dma,
-                  L4Re::Dma_space::Direction::From_device,
+                  L4Re::Dma_space::Direction::To_device,
                   L4Re::Rm::F::Cache_uncached),
   _adma2_desc_phys(_adma2_desc_mem.pget()),
   _adma2_desc(_adma2_desc_mem.get<Adma2_desc_64>()),
