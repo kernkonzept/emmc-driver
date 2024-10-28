@@ -69,7 +69,7 @@ struct Mmio_map_register_block
                                    l4_addr_t base = 0, l4_addr_t shift = 0)
   : iomem(base, iocap)
   {
-    this->set_base(iomem.vaddr.get());
+    this->set_base(iomem.vaddr.get() + iomem.offset);
     this->set_shift(shift);
   }
   Iomem iomem;
