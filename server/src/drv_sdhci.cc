@@ -877,7 +877,7 @@ void
 Sdhci::set_clock_and_timing(l4_uint32_t freq, Mmc::Timing timing, bool strobe)
 {
   clock_disable();
-  if (!freq)
+  if (!freq && _type == Type::Usdhc)
     {
       info.printf("\033[33mClock disabled.\033[m\n");
       return;
@@ -923,6 +923,11 @@ Sdhci::set_clock_and_timing(l4_uint32_t freq, Mmc::Timing timing, bool strobe)
       hc2.write(this);
     }
   set_clock(freq);
+  if (!freq)
+    {
+      info.printf("\033[33mClock disabled.\033[m\n");
+      return;
+    }
   if (_type == Type::Usdhc)
     {
       Reg_mix_ctrl mc(this);
@@ -974,9 +979,16 @@ Sdhci::set_clock(l4_uint32_t freq)
     {
     case Type::Iproc:
       {
+        if (Reg_cap2_sdhci(this).clock_mult() != 0)
+          warn.printf("Reg_cap2_sdhci.clock_mult != 0!");
+
         Reg_sys_ctrl sc;
         sc.write(this);
 
+        if (!freq)
+          return;
+
+        // Version 3.00: divisors are 10-bit and a multiple of 2.
         l4_uint32_t div;
         if (_host_clock <= freq)
           div = 1;
@@ -999,7 +1011,7 @@ Sdhci::set_clock(l4_uint32_t freq)
         Util::poll(150'000, [this] { return !!Reg_sys_ctrl(this).icst(); },
                    "Clock stable");
 
-        sc.read(this);
+        sc.read(this); // XXX is this really necessary?
         sc.sdcen() = 1;
         sc.write(this);
 
