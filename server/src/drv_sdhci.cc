@@ -324,6 +324,19 @@ Sdhci::handle_irq_data(Cmd *cmd, Reg_int_status is)
     {
       is_ack.copy_data_error(is);
       cmd->status = Cmd::Data_error;
+      if (is.admae())
+        {
+          printf("ADMA error: status=%08x, ADMA addr=%x'%08x, is=%08x\n",
+                 Reg_adma_err_status(this).raw, Reg_adma_sys_addr_hi(this).raw,
+                 Reg_adma_sys_addr_lo(this).raw, is.raw);
+          if (_type != Type::Usdhc)
+            {
+              Reg_blk_size bs(this);
+              printf("ADMA error: blockcnt=%u, blocksize=%u\n",
+                     bs.blkcnt().get(), bs.blksize().get());
+            }
+          adma2_dump_descs();
+        }
     }
   else if (is.tc())
     {
@@ -379,6 +392,15 @@ Sdhci::handle_irq_data(Cmd *cmd, Reg_int_status is)
 
   if (is_ack.raw)
     is_ack.write(this);
+
+  if (cmd->error())
+    {
+      Reg_sys_ctrl sc(this);
+      sc.rstd() = 1;
+      sc.write(this);
+      Util::poll(10000, [this] { return !Reg_sys_ctrl(this).rstd(); },
+                 "Software reset for data line");
+    }
 }
 
 /**

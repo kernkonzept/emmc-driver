@@ -570,7 +570,7 @@ private:
      * data CRC error, data timeout error, DMA error).
      */
     bool data_error() const
-    { return debe() || dce() || dtoe() || dmae(); }
+    { return debe() || dce() || dtoe() || dmae() || admae(); }
 
     void copy_cmd_error(Reg_int_status const &other)
     {
@@ -583,10 +583,11 @@ private:
     void copy_data_error(Reg_int_status const &other)
     {
       raw = 0;
-      debe() = other.debe();
-      dce()  = other.dce();
-      dtoe() = other.dtoe();
-      dmae() = other.dmae();
+      debe()  = other.debe();
+      dce()   = other.dce();
+      dtoe()  = other.dtoe();
+      admae() = other.admae();
+      dmae()  = other.dmae();
     }
   };
 
@@ -633,8 +634,10 @@ private:
       dtoesen()  = 1;
       dcesen()   = 1;
       debesen()  = 1;
+      limesen()  = 1;
       ac12sene() =    (Auto_cmd12 && cmd->flags.inout_cmd12())
                    || cmd->flags.auto_cmd23();
+      admaesen() = 1;
       dmaesen()  = 1;
       brrsen()   =    cmd->cmd == Mmc::Cmd19_send_tuning_block
                    || cmd->cmd == Mmc::Cmd21_send_tuning_block;
@@ -688,8 +691,10 @@ private:
       dtoeien()  = 1;
       dceien()   = 1;
       debeien()  = 1;
+      limeien()  = 1;
       ac12iene() =    (Auto_cmd12 && cmd->flags.inout_cmd12())
                    || cmd->flags.auto_cmd23();
+      admaeien() = 1;
       dmaeien()  = 1;
       brrien()   =    cmd->cmd == Mmc::Cmd19_send_tuning_block
                    || cmd->cmd == Mmc::Cmd21_send_tuning_block;
