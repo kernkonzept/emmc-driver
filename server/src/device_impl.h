@@ -355,7 +355,11 @@ Device<Driver>::inout_data(l4_uint64_t sector,
         {
           l4_size_t size = b->num_sectors * sector_size();
           if (size > max_size())
-            L4Re::throw_error(-L4_EINVAL, "Segment size in inout_data()");
+            {
+              warn.printf("num_sectors=%u, sector_size=%zu, size=%zx, max_size=%zx\n",
+                          b->num_sectors, sector_size(), size, max_size());
+              L4Re::throw_error(-L4_EINVAL, "Segment size in inout_data()");
+            }
           ++segments;
         }
 
@@ -512,16 +516,16 @@ Device<Driver>::start_device_scan(Errand::Callback const &cb)
               && !power_up_mmc(cmd))
             L4Re::throw_error(-L4_EIO, "Neither SD nor eMMC.");
 
-          info.printf("DMA mode: %s, cmd23: %s, auto cmd23: %s.\n",
+          info.printf("DMA mode:%s, cmd23:%s, auto cmd23:%s.\n",
                       _drv.dma_adma2() ? "adma2" : "sdma",
-                      _has_cmd23 ? "yes" : "no",
-                      _drv.auto_cmd23() ? "yes" : "no");
+                      yes_no(_has_cmd23), yes_no(_drv.auto_cmd23()));
 
           cmd->work_done();
           cmd->destruct();
         }
       catch (L4::Runtime_error const &e)
         {
+          _drv.dump();
           warn.printf("%s: %s. Skipping.\n", e.str(), e.extra_str());
           failed = true;
         }
@@ -923,6 +927,7 @@ Device<Driver>::power_up_sd(Cmd *cmd)
       // XXX implement SDIO card support
     }
 
+  // Get SD card's operating conditions.
   mmc_app_cmd(cmd, Mmc::Acmd41_sd_app_op_cond, 0);
   if (cmd->error())
     {
@@ -986,6 +991,8 @@ Device<Driver>::power_up_sd(Cmd *cmd)
       if (!ocr.not_busy())
         L4Re::throw_error(-L4_EINVAL, "Card still busy");
 
+      warn.printf("Resulting OCR after SD_APP_OP_COND: %08x\n", ocr.raw);
+
       _addr_mult = ocr.ccs() ? 1 : sector_size();
 
       if (ocr.ccs() && ocr.s18a())
@@ -1021,18 +1028,22 @@ Device<Driver>::power_up_sd(Cmd *cmd)
 
           _drv.delay(5);
         }
+      else
+        warn.printf("\033[31mCard does not announce support for 1.8V.\033[m\n");
 
       break;
     }
+
+  // *** Initialize SD card ***
 
   cmd->init(Mmc::Cmd2_all_send_cid);
   cmd_exec(cmd);
   cmd->check_error("CMD2: ALL_SEND_CID");
 
   Mmc::Reg_cid cid(cmd->resp);
-  info.printf("product: '%s', manufactured %d/%d, mid = %02x, psn = %08x\n",
+  info.printf("product: '%s', manufactured %d/%d, mid=%02x, psn=%08x\n",
               readable_product(cid.sd.pnm()).c_str(), cid.sd.mmth(),
-              cid.sd.myr(), (unsigned)cid.sd.mid(), cid.sd.psn());
+              cid.sd.myr(), cid.sd.mid().get(), cid.sd.psn());
 
   // Use the PSN as identifier for the whole device. The method `match_hid()`
   // will match for this string.
@@ -1065,11 +1076,13 @@ Device<Driver>::power_up_sd(Cmd *cmd)
               reinterpret_cast<l4_addr_t>(_io_buf.get<void>()));
   cmd->check_error("ACMD51: SEND_SCR");
 
+  if (false && trace.is_active())
+    _io_buf.dump("Got SCR:", 4, 8);
+
   Mmc::Reg_scr const scr(_io_buf.get<l4_uint8_t const>());
-  info.printf("SCR version %s, 1-bit bus: %d, 4-bit bus: %d, cmd23:%d\n",
-              scr.sd_spec_str(), (unsigned)scr.sd_bus_width_1(),
-              (unsigned)scr.sd_bus_width_4(),
-              (unsigned)scr.cmd23_support());
+  info.printf("SCR version %s, 1-bit bus:%s, 4-bit bus:%s, cmd23:%s\n",
+              scr.sd_spec_str(), yes_no(scr.sd_bus_width_1()),
+              yes_no(scr.sd_bus_width_4()), yes_no(scr.cmd23_support()));
 
   if (scr.sd_spec_vers() < 300)
     L4Re::throw_error(-L4_EINVAL, "SD spec < 3.0, adapt implementation");
@@ -1081,6 +1094,9 @@ Device<Driver>::power_up_sd(Cmd *cmd)
   mmc_app_cmd(cmd, Mmc::Acmd13_sd_status, 0, 64, _io_buf.pget(),
               reinterpret_cast<l4_addr_t>(_io_buf.get<void>()));
   cmd->check_error("ACMD13: SD_STATUS");
+
+  if (false && trace.is_active())
+    _io_buf.dump("Got SSR:", 4, 64);
 
   Mmc::Reg_ssr const ssr(_io_buf.get<l4_uint8_t const>());
   info.printf("SSR: speed:'%s', UHS_speed:'%s', AU size:%s\n",
@@ -1095,16 +1111,19 @@ Device<Driver>::power_up_sd(Cmd *cmd)
   cmd_exec(cmd);
   cmd->check_error("CMD6: SWITCH_FUNC/GET");
 
-  Mmc::Reg_switch_func sf(_io_buf.get<l4_uint8_t>());
-  trace.printf("access: sdr12:%d, sdr25:%d, sdr50:%d, sdr104:%d, ddr50:%d\n",
-               (unsigned)sf.acc_mode_sdr12(), (unsigned)sf.acc_mode_sdr25(),
-               (unsigned)sf.acc_mode_sdr50(), (unsigned)sf.acc_mode_sdr104(),
-               (unsigned)sf.acc_mode_ddr50());
+  if (false && trace.is_active())
+    _io_buf.dump("Got switch function status:", 4, 64);
 
-  trace.printf("power limit: 0.72W:%d, 1.44W:%d, 2.16W:%d, 2.88W:%d, 1.80W:%d\n",
-               (unsigned)sf.power_limit_072w(), (unsigned)sf.power_limit_144w(),
-               (unsigned)sf.power_limit_216w(), (unsigned)sf.power_limit_288w(),
-               (unsigned)sf.power_limit_180w());
+  Mmc::Reg_switch_func sf(_io_buf.get<l4_uint8_t>());
+  trace.printf("access: sdr12:%s, sdr25:%s, sdr50:%s, sdr104:%s, ddr50:%s\n",
+               yes_no(sf.acc_mode_sdr12()), yes_no(sf.acc_mode_sdr25()),
+               yes_no(sf.acc_mode_sdr50()), yes_no(sf.acc_mode_sdr104()),
+               yes_no(sf.acc_mode_ddr50()));
+
+  trace.printf("power limit: 0.72W:%s, 1.44W:%s, 2.16W:%s, 2.88W:%s, 1.80W:%s\n",
+               yes_no(sf.power_limit_072w()), yes_no(sf.power_limit_144w()),
+               yes_no(sf.power_limit_216w()), yes_no(sf.power_limit_288w()),
+               yes_no(sf.power_limit_180w()));
 
   Mmc::Timing mmc_timing;
   Mmc::Arg_cmd6_switch_func::Grp1_acc_mode a6_timing;
@@ -1149,8 +1168,10 @@ Device<Driver>::power_up_sd(Cmd *cmd)
   // Bus width -- also for HS!
   if (has_bus_4bit)
     {
-      mmc_app_cmd(cmd, Mmc::Acmd6_set_bus_width, 0x2);
-      cmd->check_error("ACMD13: SET_BUS_WIDTH");
+      Mmc::Arg_acmd6_sd_set_bus_width a6;
+      a6.bus_width() = a6.Bus_width_4bit;
+      mmc_app_cmd(cmd, Mmc::Acmd6_set_bus_width, a6.raw);
+      cmd->check_error("ACMD6: SET_BUS_WIDTH");
 
       _drv.set_bus_width(Mmc::Width_4bit);
     }
@@ -1225,7 +1246,7 @@ Device<Driver>::power_up_mmc(Cmd *cmd)
   // Only probe
   Mmc::Reg_ocr ocr(cmd->resp[0]);
   trace.printf("OCR: busy=%d voltrange=%05x, ccs=%s, raw=%08x\n",
-               !ocr.not_busy(), (unsigned)ocr.voltrange_mmc(),
+               !ocr.not_busy(), ocr.voltrange_mmc().get(),
                !!ocr.ccs() ? "sector" : "byte", ocr.raw);
 
   cmd->init(Mmc::Cmd0_go_idle_state);
@@ -1245,7 +1266,7 @@ Device<Driver>::power_up_mmc(Cmd *cmd)
       ocr.raw = cmd->resp[0];
       // see eMMC spec 6.4.2
       trace.printf("OCR: busy=%d voltrange=%05x, ccs=%s, raw=%08x\n",
-                   !ocr.not_busy(), (unsigned)ocr.voltrange_mmc(),
+                   !ocr.not_busy(), ocr.voltrange_mmc().get(),
                    !!ocr.ccs() ? "sector" : "byte", ocr.raw);
       if (ocr.raw != 0x00ff8080 && ocr.raw != 0x40ff8080 && ocr.not_busy())
         break;
@@ -1272,7 +1293,7 @@ Device<Driver>::power_up_mmc(Cmd *cmd)
   Mmc::Reg_cid cid(cmd->resp);
   info.printf("product: '%s', manufactured %d/%d, mid = %02x, psn = %08x\n",
               readable_product(cid.mmc.pnm()).c_str(), cid.mmc.mmth(),
-              cid.mmc.myr(), (unsigned)cid.mmc.mid(), cid.mmc.psn());
+              cid.mmc.myr(), cid.mmc.mid().get(), cid.mmc.psn());
 
   // Use the PSN as identifier for the whole device. The method `match_hid()`
   // will match for this string.
@@ -1316,16 +1337,11 @@ Device<Driver>::power_up_mmc(Cmd *cmd)
   else
     trace.printf("No device size reported.\n");
 
-#if 0
-  printf("=== EXT_CSD dump ===\n");
-  auto u8_buf = _io_buf.get<l4_uint8_t>();
-  for (unsigned i = 0; i < 512; ++i)
+  if (false)
     {
-      printf("%02x ", u8_buf[i]);
-      if (!((i+1) % 16))
-        printf("\n");
+      printf("=== EXT_CSD dump ===\n");
+      _io_buf.dump("Got ExtCSD:", 1, 512);
     }
-#endif
 
   _mmc_rev = _ecsd.ec192_ext_csd_rev.mmc_rev();
   info.printf("Device rev: 1.%u, eMMC rev: %u.%02u, %s, %s timing.\n",
@@ -1365,12 +1381,12 @@ Device<Driver>::power_up_mmc(Cmd *cmd)
       if (_device_type_restricted.raw & (1 << i))
         info.printf("  %s\n", _device_type_restricted.str_device_type(1 << i));
 
-  trace.printf("Driver strength: 4: %s, 3: %s, 2: %s, 1: %s, 0: %s\n",
-               _ecsd.ec197_driver_strength.type4() ? "yes" : "N/A",
-               _ecsd.ec197_driver_strength.type3() ? "yes" : "N/A",
-               _ecsd.ec197_driver_strength.type2() ? "yes" : "N/A",
-               _ecsd.ec197_driver_strength.type1() ? "yes" : "N/A",
-               _ecsd.ec197_driver_strength.type0() ? "yes" : "N/A");
+  trace.printf("Driver strength: 4:%s, 3:%s, 2:%s, 1:%s, 0:%s\n",
+               yes_na(_ecsd.ec197_driver_strength.type4()),
+               yes_na(_ecsd.ec197_driver_strength.type3()),
+               yes_na(_ecsd.ec197_driver_strength.type2()),
+               yes_na(_ecsd.ec197_driver_strength.type1()),
+               yes_na(_ecsd.ec197_driver_strength.type0()));
 
   Mmc::Reg_ecsd::Ec175_erase_group_def eg(0);
   eg.enable() = 1;
@@ -1646,7 +1662,7 @@ Device<Driver>::show_csd(Mmc::Reg_csd const &csd)
                read_bl_len, write_bl_len);
   if (size)
     trace.printf("Device size (CSD): %s\n", Util::readable_size(size).c_str());
-  trace.printf("Bus clock frequency: %s\n", Util::readable_freq(bus_freq).c_str());
+  info.printf("Bus clock frequency: %s\n", Util::readable_freq(bus_freq).c_str());
 }
 
 } // namespace Emmc

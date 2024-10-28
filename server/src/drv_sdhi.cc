@@ -467,12 +467,12 @@ Sdhi::dump() const
 {
   warn.printf("Registers:\n");
   for (unsigned i = 0; i < 0xF0; i += 8)
-    warn.printf("  %04x: %08x\n", i, (unsigned)_regs[i]);
-  warn.printf("  %04x: %08x\n", 0x360, (unsigned)_regs[0x360]);
+    warn.printf("  %04x: %08x\n", i, l4_uint32_t{_regs[i]});
+  warn.printf("  %04x: %08x\n", 0x360, l4_uint32_t{_regs[0x360]});
   for (unsigned i = 0x380; i < 0x3a0; i += 8)
-    warn.printf("  %04x: %08x\n", i, (unsigned)_regs[i]);
+    warn.printf("  %04x: %08x\n", i, l4_uint32_t{_regs[i]});
   for (unsigned i = 0x800; i < 0x8e0; i += 8)
-    warn.printf("  %04x: %08x\n", i, (unsigned)_regs[i]);
+    warn.printf("  %04x: %08x\n", i, l4_uint32_t{_regs[i]});
 }
 
 } // namespace Emmc

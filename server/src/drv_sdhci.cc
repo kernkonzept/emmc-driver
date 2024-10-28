@@ -97,6 +97,9 @@ Sdhci::Sdhci(int nr,
   info.printf("SDHCI controller capabilities: %08x (%d-bit). SDHCI %s.\n",
               cap1.raw, cap1.bit64_v3() ? 64 : 32,
               Reg_host_version(this).spec_version());
+  if (   Reg_host_version(this).spec_vers() >= 2
+      && Reg_host_ctrl2(this).presvlen())
+    warn.printf("SDHCI: Preset value enable\n");
 
   if (cap1.bit64_v3())
     _adma2_64 = true;
@@ -132,9 +135,8 @@ Sdhci::init()
     {
       Reg_host_ctrl_cap cc(this);
       trace.printf("Host controller capabilities (%08x): sdr50=%d, sdr104=%d, ddr50=%d\n",
-                   cc.raw,
-                   (unsigned)cc.sdr50_support(), (unsigned)cc.sdr104_support(),
-                   (unsigned)cc.ddr50_support());
+                   cc.raw, cc.sdr50_support().get(), cc.sdr104_support().get(),
+                   cc.ddr50_support().get());
 
       Reg_mmc_boot().write(this);
       Reg_mix_ctrl().write(this);
@@ -726,6 +728,10 @@ Sdhci::cmd_submit(Cmd *cmd)
     trace.printf("Send \033[33mCMD%d / %d (arg=%08x) -- %s\033[m\n",
                  cmd->cmd_idx(), (cmd->arg >> 16) & 0xff, cmd->arg,
                  cmd->cmd_to_str().c_str());
+  else if (cmd->cmd == Mmc::Cmd6_switch_func)
+    trace.printf("Send \033[33mCMD%d / %s (arg=%08x) -- %s\033[m\n",
+                 cmd->cmd_idx(), (cmd->arg & (1 << 31)) ? "Set" : "Check",
+                 cmd->arg, cmd->cmd_to_str().c_str());
   else
     trace.printf("Send \033[32mCMD%d (arg=%08x) -- %s\033[m\n",
                  cmd->cmd_idx(), cmd->arg, cmd->cmd_to_str().c_str());
@@ -1218,8 +1224,10 @@ void
 Sdhci::dump() const
 {
   warn.printf("Registers:\n");
-  for (unsigned i = 0; i < 0x100; i += 4)
-    warn.printf("  %04x: %08x\n", i, unsigned{_regs[i]});
+  for (unsigned i = 0; i < 0x128; i += 16)
+    printf("  %03x: %08x %08x %08x %08x\n",
+           i, l4_uint32_t{_regs[i]}, l4_uint32_t{_regs[i + 4]},
+           l4_uint32_t{_regs[i + 8]}, l4_uint32_t{_regs[i + 12]});
 }
 
 /**

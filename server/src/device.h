@@ -325,6 +325,9 @@ private:
   /// Mask for bits in device_type which should be ignored.
   Mmc::Reg_ecsd::Ec196_device_type _device_type_disable;
 
+  constexpr char const *yes_no(unsigned bit) { return bit ? "yes" : "no"; }
+  constexpr char const *yes_na(unsigned bit) { return bit ? "yes" : "N/A"; }
+
   // ::::: See #CD-202 ::::::::
   //
   // Dataspace + offset => phys
