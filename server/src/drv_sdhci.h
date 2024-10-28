@@ -89,6 +89,15 @@ private:
      * Only for uSDHCI and iproc/arasan.
      */
     Auto_cmd23 = true,
+
+    /**
+     * On true, do not use DMA during setup for reading certain device
+     * registers.
+     *
+     * Only for SDHCI.
+     * If this is really necessary then something else is probably wrong.
+     */
+    No_dma_during_setup = false,
   };
   static_assert(!Auto_cmd23 || Dma_adma2, "Auto_cmd23 depends on Dma_adma2");
 

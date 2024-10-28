@@ -204,7 +204,7 @@ void
 Sdhci::handle_irq_cmd(Cmd *cmd, Reg_int_status is)
 {
   Reg_int_status is_ack;
-  if (trace.is_active()) // otherwise don't read Reg_int_status
+  if (trace.is_active()) // otherwise don't read Reg_int_status_en
     trace.printf("handle_irq_cmd: is = %08x, isen = %08x\n",
                  is.raw, Reg_int_status_en().read(this));
   if (is.ctoe())
@@ -276,7 +276,7 @@ void
 Sdhci::handle_irq_data(Cmd *cmd, Reg_int_status is)
 {
   Reg_int_status is_ack;
-  if (trace.is_active()) // otherwise don't read Reg_int_status
+  if (trace.is_active()) // otherwise don't read Reg_int_status_en
     trace.printf("handle_irq_data: is = %08x, isen = %08x\n",
                  is.raw, Reg_int_status_en().read(this));
   if (is.data_error())
@@ -310,6 +310,29 @@ Sdhci::handle_irq_data(Cmd *cmd, Reg_int_status is)
                 break;
           Reg_ds_addr(cmd->data_phys).write(this);
           is_ack.raw = 0;
+        }
+    }
+  else if (is.brr())
+    {
+      // Only for setup (CMD6, ACMD13).
+      is_ack.brr() = 1;
+      l4_uint32_t *words = reinterpret_cast<l4_uint32_t *>(cmd->data_virt);
+      for (unsigned i = 0; i < cmd->blocksize; i += 4)
+        {
+          Reg_data_buff_acc_port data(this);
+          words[i / 4] = data.raw;
+        }
+    }
+  else if (is.bwr())
+    {
+      // During setup we only perform READ operations on multi-byte registers so
+      // this code is currently untested.
+      is_ack.bwr() = 1;
+      l4_uint32_t *words = reinterpret_cast<l4_uint32_t *>(cmd->data_virt);
+      for (unsigned i = 0; i < cmd->blocksize; i += 4)
+        {
+          Reg_data_buff_acc_port data( words[i / 4]);
+          data.write(this);
         }
     }
 
@@ -378,7 +401,19 @@ Sdhci::cmd_submit(Cmd *cmd)
 
   L4Re::Dma_space::Dma_addr dma_addr = ~0ULL;
 
-  if (cmd->flags.has_data())
+  if (No_dma_during_setup
+      && cmd->flags.has_data() && _type == Type::Iproc && cmd->data_virt != 0)
+    {
+      Reg_blk_size bz;
+      bz.blkcnt() = cmd->blockcnt;
+      bz.blksize() = cmd->blocksize;
+      bz.write(this);
+      xt.dpsel() = 1;
+      xt.bcen() = !!(cmd->blockcnt > 1);
+      xt.msbsel() = !!(cmd->blockcnt > 1);
+      xt.dtdsel() = !!(cmd->cmd & Mmc::Dir_read);
+    }
+  else if (cmd->flags.has_data())
     {
       switch (_type)
         {
@@ -593,16 +628,19 @@ Sdhci::cmd_submit(Cmd *cmd)
 
   Reg_cmd_arg(cmd->arg).write(this);
 
-  // clear all IRQs
-  Reg_int_status(~0U).write(this);
-  // enable IRQ status
+  Reg_int_status(~0U).write(this); // clear all IRQs
   Reg_int_status_en se;
   se.enable_ints(cmd);
-  se.write(this);
-  // unmask IRQs
+  if (No_dma_during_setup
+      && cmd->flags.has_data() && _type == Type::Iproc && cmd->data_virt != 0)
+    {
+      se.brrsen() = 1;
+      se.bwrsen() = 1;
+    }
+  se.write(this); // enable status
   Reg_int_signal_en ie;
   ie.enable_ints(cmd);
-  ie.write(this);
+  ie.write(this); // unmask IRQs
 
   // send the command
   if (cmd->cmd == Mmc::Cmd6_switch)

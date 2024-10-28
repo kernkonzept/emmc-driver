@@ -258,7 +258,8 @@ private:
                        bool with_status = true);
 
   void mmc_app_cmd(Cmd *cmd, l4_uint32_t cmdval, l4_uint32_t arg,
-                   l4_uint32_t datalen = 0, l4_uint32_t dataphys = 0);
+                   l4_uint32_t datalen = 0, l4_uint64_t dataphys = 0,
+                   l4_addr_t datavirt = 0);
 
   void show_statistics();
   void show_csd(Mmc::Reg_csd const &csd);

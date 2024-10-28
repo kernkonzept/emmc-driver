@@ -133,7 +133,8 @@ public:
 
   /** Command for single data transfer (CMD8). */
   void init_data(l4_uint32_t cmd_val, l4_uint32_t arg_val,
-                 l4_uint32_t blocksize_val, l4_addr_t data_phys_val)
+                 l4_uint32_t blocksize_val, l4_uint64_t data_phys_val,
+                 l4_addr_t data_virt_val)
   {
     cmd = cmd_val;
     arg = arg_val;
@@ -143,7 +144,8 @@ public:
     blocksize = blocksize_val;
     if (data_phys & 0xffffffff00000000ULL)
       L4Re::throw_error(-L4_ENOMEM, "Physical address beyond 4G");
-    data_phys = (l4_uint32_t)data_phys_val;
+    data_phys = data_phys_val & 0xffffffff;
+    data_virt = data_virt_val;
     blocks = nullptr;
     status = Ready_for_submit;
   }
@@ -241,6 +243,7 @@ public:
   l4_uint32_t  blockcnt;        ///< Number of blocks if flags.has_data = true.
   l4_uint32_t  blocksize;       ///< Block size if flags.has_data = true.
   l4_uint32_t  data_phys;       ///< Physical address if flags.has_data = true.
+  l4_addr_t    data_virt;       ///< Only for certain MMIO requests.
   l4_uint32_t  resp[4];         ///< 16 bytes = 128 bits.
 
   // inout()

@@ -853,7 +853,7 @@ Device<Driver>::mmc_set_timing(Cmd *cmd,
       return;
     }
 
-  cmd->init_data(Mmc::Cmd8_send_ext_csd, 0, 512, _io_buf.pget());
+  cmd->init_data(Mmc::Cmd8_send_ext_csd, 0, 512, _io_buf.pget(), 0);
   cmd_exec(cmd);
   if (cmd->error())
     {
@@ -1050,7 +1050,8 @@ Device<Driver>::power_up_sd(Cmd *cmd)
       L4Re::throw_error(-L4_EIO, "Device is locked!");
     }
 
-  mmc_app_cmd(cmd, Mmc::Acmd51_send_scr, 0, 8, _io_buf.pget());
+  mmc_app_cmd(cmd, Mmc::Acmd51_send_scr, 0, 8, _io_buf.pget(),
+              reinterpret_cast<l4_addr_t>(_io_buf.get<void>()));
   cmd->check_error("ACMD51: SEND_SCR");
 
   Mmc::Reg_scr const scr(_io_buf.get<l4_uint8_t const>());
@@ -1066,7 +1067,8 @@ Device<Driver>::power_up_sd(Cmd *cmd)
 
   bool has_bus_4bit = scr.sd_bus_width_4();
 
-  mmc_app_cmd(cmd, Mmc::Acmd13_sd_status, 0, 64, _io_buf.pget());
+  mmc_app_cmd(cmd, Mmc::Acmd13_sd_status, 0, 64, _io_buf.pget(),
+              reinterpret_cast<l4_addr_t>(_io_buf.get<void>()));
   cmd->check_error("ACMD13: SD_STATUS");
 
   Mmc::Reg_ssr const ssr(_io_buf.get<l4_uint8_t const>());
@@ -1077,7 +1079,8 @@ Device<Driver>::power_up_sd(Cmd *cmd)
   Mmc::Arg_cmd6_switch_func a6;
   a6.grp1_acc_mode() = a6.Grp1_sdr12;
   a6.mode() = a6.Check_function;
-  cmd->init_data(Mmc::Cmd6_switch_func, a6.raw, 64, _io_buf.pget());
+  cmd->init_data(Mmc::Cmd6_switch_func, a6.raw, 64, _io_buf.pget(),
+                 reinterpret_cast<l4_addr_t>(_io_buf.get<void>()));
   cmd_exec(cmd);
   cmd->check_error("CMD6: SWITCH_FUNC/GET");
 
@@ -1161,7 +1164,8 @@ Device<Driver>::power_up_sd(Cmd *cmd)
           a6.reset();
           a6.grp4_power_limit() = a6_power;
           a6.mode() = a6.Set_function;
-          cmd->init_data(Mmc::Cmd6_switch_func, a6.raw, 64, _io_buf.pget());
+          cmd->init_data(Mmc::Cmd6_switch_func, a6.raw, 64, _io_buf.pget(),
+                         reinterpret_cast<l4_addr_t>(_io_buf.get<void>()));
           cmd_exec(cmd);
           cmd->check_error("CMD6: SWITCH_FUCN/SET_POWER");
           if (sf.fun_sel_grp4() == sf.Invalid_function)
@@ -1172,7 +1176,8 @@ Device<Driver>::power_up_sd(Cmd *cmd)
   a6.reset();
   a6.grp1_acc_mode() = a6_timing;
   a6.mode() = a6.Set_function;
-  cmd->init_data(Mmc::Cmd6_switch_func, a6.raw, 64, _io_buf.pget());
+  cmd->init_data(Mmc::Cmd6_switch_func, a6.raw, 64, _io_buf.pget(),
+                 reinterpret_cast<l4_addr_t>(_io_buf.get<void>()));
   cmd_exec(cmd);
   cmd->check_error("CMD6: SWITCH_FUNC/SET_MODE");
   if (sf.fun_sel_grp1() == sf.Invalid_function)
@@ -1289,7 +1294,7 @@ Device<Driver>::power_up_mmc(Cmd *cmd)
       L4Re::throw_error(-L4_EIO, "Device is locked!");
     }
 
-  cmd->init_data(Mmc::Cmd8_send_ext_csd, 0, 512, _io_buf.pget());
+  cmd->init_data(Mmc::Cmd8_send_ext_csd, 0, 512, _io_buf.pget(), 0);
   cmd_exec(cmd);
   cmd->check_error("CMD8: SEND_EXT_CSD");
 
@@ -1573,7 +1578,8 @@ Device<Driver>::exec_mmc_switch(Cmd *cmd, l4_uint8_t idx, l4_uint8_t val,
 template <class Driver>
 void
 Device<Driver>::mmc_app_cmd(Cmd *cmd, l4_uint32_t cmdval, l4_uint32_t arg,
-                            l4_uint32_t datalen, l4_uint32_t dataphys)
+                            l4_uint32_t datalen, l4_uint64_t dataphys,
+                            l4_addr_t datavirt)
 {
   cmd->init_arg(Mmc::Cmd55_app_cmd, _rca << 16);
   cmd_exec(cmd);
@@ -1581,7 +1587,7 @@ Device<Driver>::mmc_app_cmd(Cmd *cmd, l4_uint32_t cmdval, l4_uint32_t arg,
     return; // caller will handle this
 
   if (datalen)
-    cmd->init_data(cmdval, arg, datalen, dataphys);
+    cmd->init_data(cmdval, arg, datalen, dataphys, datavirt);
   else
     cmd->init_arg(cmdval, arg);
   cmd->mark_app_cmd();
