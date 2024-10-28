@@ -1141,6 +1141,64 @@ Sdhci::tuning_finished(bool *success)
   return true;
 }
 
+Mmc::Reg_ocr
+Sdhci::supported_voltage() const
+{
+  Mmc::Reg_ocr ocr(0);
+  switch (_type)
+    {
+    case Type::Iproc:
+      {
+        Reg_cap1_sdhci cap1(this);
+        if (cap1.vs33())
+          {
+            ocr.mv3200_3300() = 1;
+            ocr.mv3300_3400() = 1;
+          }
+        if (cap1.vs30())
+          {
+            ocr.mv2900_3000() = 1;
+            ocr.mv3000_3100() = 1;
+          }
+        break;
+      }
+    default:
+      ocr.mv3200_3300() = 1;
+      ocr.mv3300_3400() = 1;
+      break;
+    }
+
+  return ocr;
+}
+
+bool
+Sdhci::xpc_supported(Mmc::Voltage voltage) const
+{
+  switch (_type)
+    {
+    case Type::Iproc:
+      {
+        // For XPC the controller supports up to 540mW at the desired voltage.
+        Reg_max_current mc(this);
+        switch (voltage)
+          {
+          case Mmc::Voltage_180:
+            // 1.8V * 300mA = 540mW
+            return mc.max_current(mc.max_current_18v_vdd1()) >= 300;
+          case Mmc::Voltage_330:
+            // 3.3V * 164mA = 541mW
+            return mc.max_current(mc.max_current_33v_vdd1()) >= 164;
+          default:
+            warn.printf("\033[31mInvalid voltage %s!\033[m",
+                        Mmc::str_voltage(voltage));
+            return false;
+          }
+      }
+    default:
+      return true;
+    }
+}
+
 void
 Sdhci::dump() const
 {

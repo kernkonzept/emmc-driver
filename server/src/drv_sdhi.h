@@ -88,6 +88,9 @@ public:
     return ocr;
   }
 
+  bool xpc_supported(Mmc::Voltage) const
+  { return true; }
+
   void dump() const;
 
 private:

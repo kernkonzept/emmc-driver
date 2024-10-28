@@ -1234,13 +1234,12 @@ public:
   }
 
   /** Return supported power values by the controller. */
-  Mmc::Reg_ocr supported_voltage() const
-  {
-    Mmc::Reg_ocr ocr(0);
-    ocr.mv3200_3300() = 1;
-    ocr.mv3300_3400() = 1;
-    return ocr;
-  }
+  Mmc::Reg_ocr supported_voltage() const;
+
+  /**
+   * Return true if the controller supports up to 540mW at the desired voltage.
+   */
+  bool xpc_supported(Mmc::Voltage voltage) const;
 
   void sdio_reset(Cmd *cmd);
 

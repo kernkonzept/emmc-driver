@@ -892,22 +892,14 @@ Device<Driver>::adapt_ocr(Mmc::Reg_ocr ocr_dev, Mmc::Arg_acmd41_sd_send_op *a41)
   Mmc::Reg_ocr ocr_drv = _drv.supported_voltage();
   Mmc::Arg_acmd41_sd_send_op arg;
   arg.mv3500_3600() = ocr_dev.mv3500_3600() && ocr_drv.mv3500_3600();
-  if (!arg.raw)
-    arg.mv3400_3500() = ocr_dev.mv3400_3500() && ocr_drv.mv3400_3500();
-  if (!arg.raw)
-    arg.mv3300_3400() = ocr_dev.mv3300_3400() && ocr_drv.mv3300_3400();
-  if (!arg.raw)
-    arg.mv3200_3300() = ocr_dev.mv3200_3300() && ocr_drv.mv3200_3300();
-  if (!arg.raw)
-    arg.mv3100_3200() = ocr_dev.mv3100_3200() && ocr_drv.mv3100_3200();
-  if (!arg.raw)
-    arg.mv3000_3100() = ocr_dev.mv3000_3100() && ocr_drv.mv3000_3100();
-  if (!arg.raw)
-    arg.mv2900_3000() = ocr_dev.mv2900_3000() && ocr_drv.mv2900_3000();
-  if (!arg.raw)
-    arg.mv2800_2900() = ocr_dev.mv2800_2900() && ocr_drv.mv2800_2900();
-  if (!arg.raw)
-    arg.mv2700_2800() = ocr_dev.mv2700_2800() && ocr_drv.mv2700_2800();
+  arg.mv3400_3500() = ocr_dev.mv3400_3500() && ocr_drv.mv3400_3500();
+  arg.mv3300_3400() = ocr_dev.mv3300_3400() && ocr_drv.mv3300_3400();
+  arg.mv3200_3300() = ocr_dev.mv3200_3300() && ocr_drv.mv3200_3300();
+  arg.mv3100_3200() = ocr_dev.mv3100_3200() && ocr_drv.mv3100_3200();
+  arg.mv3000_3100() = ocr_dev.mv3000_3100() && ocr_drv.mv3000_3100();
+  arg.mv2900_3000() = ocr_dev.mv2900_3000() && ocr_drv.mv2900_3000();
+  arg.mv2800_2900() = ocr_dev.mv2800_2900() && ocr_drv.mv2800_2900();
+  arg.mv2700_2800() = ocr_dev.mv2700_2800() && ocr_drv.mv2700_2800();
   arg.hcs() = 1; // Host supports high-capacity, should only be set on >= SD2.0
   *a41 = arg;
 }
@@ -938,14 +930,24 @@ Device<Driver>::power_up_sd(Cmd *cmd)
       return false;
     }
 
-  warn.printf("Found SD card version 2 or later.\n");
+  warn.printf("Found SD card version 2 or later, OCR=%08x.\n", cmd->resp[0]);
+
+  // SD Host Controller Simplified Specification Figure 3-6
 
   Mmc::Arg_acmd41_sd_send_op a41;
   adapt_ocr(Mmc::Reg_ocr(cmd->resp[0]), &a41);
 
-  a41.xpc() = 1; // for SDHCI: check reg 0x48 (Maximum Current Capabilities)
   if (_drv.supp_uhs_timings(Mmc::Uhs_modes))
-    a41.s18r() = 1;
+    {
+      a41.s18r() = 1;
+      if (_drv.xpc_supported(Mmc::Voltage_180))
+        a41.xpc() = 1;
+    }
+  else
+    {
+      if (_drv.xpc_supported(Mmc::Voltage_330))
+        a41.xpc() = 1;
+    }
 
   // SD spec physical layer simplified spec 8.00 / 4.2.4.1
   bool v18 = false;
