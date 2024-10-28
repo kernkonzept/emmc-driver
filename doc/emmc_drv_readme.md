@@ -30,8 +30,9 @@ Please see io's documentation about how to setup a virtual bus.
 
 The eMMC driver supports SDHCI and SDHI controllers, in particular
 - SDHI interfaces found on RCar3 r8a7795 boards
+- SDHCI interfaces found on RPI4
 - uSDHCI interfaces found on i.MX8 boards
-- the QEMU SD card emulation (see `doc/pcie-ecam.io`),
+- the QEMU SD card emulation (SDHCI, see `doc/pcie-ecam.io`),
 - the QEMU eMMC emulation (provided by extending the QEMU SD card emulation by
   `doc/qemu-patch.diff`).
 
@@ -55,6 +56,11 @@ command line options:
 
   This option allows to disable certain eMMC modes from autodetection. The
   modes `hs26`, `hs52`, `hs52_ddr`, `hs200`, and `hs400` are determined.
+
+* `--max-seg <number>`
+
+  Maximum number of segments per request. This number is announced to the virtio
+  interface and is also relevant for the required bounce buffer size, see below.
 
 * `--client <cap_name>`
 
@@ -129,6 +135,38 @@ virtio driver is returned. A client uses this capability to communicate with
 the eMMC driver using the Virtio block protocol.
 
 
+## Recognized capabilities
+
+The driver makes use of certain capabilities:
+
+* `vbus`
+
+  Required for finding the device which should be driven by this driver.
+
+* `bbds`
+
+  **Only used by the SDHCI driver.**  
+  Certain SDHCI devices cannot handle DMA requests with DMA buffers beyond 4GiB.
+  The provided dataspace is used as bounce buffer if the driver detects that a
+  certain request needs it.  
+  **Note:** The bounce buffer needs to be able to hold the memory for an entire
+  read/write request. That means that the buffer is divided into the number of
+  maximum segments (see `--max-seg` parameter).
+
+* `sdhci_adma_buf`
+
+  **Only used by the SDHCI driver.**  
+  Page (4096 bytes) for storing DMA descriptors for the SDHCI driver. If this
+  capability is not provided, the driver will allocate an arbitrary page.
+
+* `bcm2835_mbox_mem`
+
+  **Only used by the SDHCI driver when attaching to an bcm2711-compatible device.**  
+  Page (4096 bytes) for storing bcm2835 mbox messages. The firmware mbox is used
+  to perform voltage switching for certain SD card configurations. If this
+  capability is not provided, the driver will allocate an arbitrary page.
+
+
 ## Examples
 
 A couple of examples on how to request different disks or partitions are listed
@@ -154,14 +192,14 @@ below.
 
 * Accessing a device from QEMU:
 
-The file `pcie-ecam.io` contains an IO config file which is able to use the
-QEMU PCI controller to search for attached eMMC devices.
+  The file `pcie-ecam.io` contains an IO config file which is able to use the
+  QEMU PCI controller to search for attached eMMC devices.
 
 * eMMC emulation with QEMU:
 
-The attached patch extends QEMU SD card emulation to emulate eMMC devices.
-After applying the patch and recompiling QEMU, attach the following parameters
-to your QEMU command line (assuming that `$HOME/foobar.img` is the eMMC medium):
+  The attached patch extends QEMU SD card emulation to emulate eMMC devices.
+  After applying the patch and recompiling QEMU, attach the following parameters
+  to your QEMU command line (assuming that `$HOME/foobar.img` is the eMMC medium):
 ```
 -drive id=sd_disk,file=$(HOME)/foobar.img,if=none,format=raw \
 -device sdhci-pci,id=sdhci \
