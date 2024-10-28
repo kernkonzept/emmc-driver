@@ -9,12 +9,13 @@
  * \file backend for SDHCI used by i.MX8.
  */
 
+#include <l4/sys/cache.h>
+
 #include "cmd.h"
 #include "debug.h"
 #include "drv_sdhci.h"
 #include "mmc.h"
 #include "util.h"
-#include "l4/sys/cache.h"
 
 namespace Emmc {
 
@@ -564,26 +565,21 @@ Sdhci::cmd_submit(Cmd *cmd)
       // XXX Timeout ...
 
       xt.dpsel() = 1;
-      if (_type == Type::Usdhc)
-        mc.dmaen() = 1;
-      else
-        xt.dmaen() = 1;
 
       if (_type == Type::Usdhc)
         {
+          mc.dmaen() = 1;
           mc.bcen() = !!(cmd->blockcnt > 1);
           mc.msbsel() = !!(cmd->blockcnt > 1);
+          mc.dtdsel() = !!(cmd->cmd & Mmc::Dir_read);
         }
       else
         {
+          xt.dmaen() = 1;
           xt.bcen() = !!(cmd->blockcnt > 1);
           xt.msbsel() = !!(cmd->blockcnt > 1);
+          xt.dtdsel() = !!(cmd->cmd & Mmc::Dir_read);
         }
-
-      if (_type == Type::Usdhc)
-        mc.dtdsel() = !!(cmd->cmd & Mmc::Dir_read);
-      else
-        xt.dtdsel() = !!(cmd->cmd & Mmc::Dir_read);
     }
   else // no data
     {
