@@ -11,6 +11,7 @@
 
 #include <l4/cxx/bitfield>
 #include <l4/cxx/minmax>
+#include <l4/sys/ktrace.h>
 
 #include "drv.h"
 #include "inout_buffer.h"
@@ -27,6 +28,10 @@ namespace Emmc {
 class Sdhci : public Drv<Sdhci>
 {
   friend Drv;
+
+  // Enable to generate kernel tracebuffer records for every SDHCI register
+  // read/write access.
+  enum { Trace_reg_access = false };
 
 public:
   enum class Type
@@ -163,15 +168,21 @@ private:
     explicit Reg(Sdhci const *sdhci)
     : raw(sdhci->_regs[offs])
     {
+      if (Trace_reg_access)
+        fiasco_tbuf_log_3val("read ", offs, raw, 0);
     }
     explicit Reg(l4_uint32_t v) : raw(v) {}
     l4_uint32_t read(Sdhci const *sdhci)
     {
       raw = sdhci->_regs[offs];
+      if (Trace_reg_access)
+        fiasco_tbuf_log_3val("read ", offs, raw, 0);
       return raw;
     }
     void write(Sdhci *sdhci)
     {
+      if (Trace_reg_access)
+        fiasco_tbuf_log_3val("WRITE", offs, raw, 0);
       write_delayed(sdhci, offs, raw);
     }
     l4_uint32_t raw;
