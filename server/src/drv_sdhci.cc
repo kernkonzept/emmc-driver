@@ -927,11 +927,25 @@ Sdhci::set_clock(l4_uint32_t freq)
 void
 Sdhci::set_bus_width(Mmc::Bus_width bus_width)
 {
-  Reg_prot_ctrl pc(this);
-  pc.set_bus_width(bus_width);
-  pc.write(this);
-
-  info.printf("\033[33mSet bus width to %s.\033[m\n", pc.str_bus_width());
+  switch (_type)
+    {
+    case Type::Usdhc:
+      {
+        Reg_prot_ctrl pc(this);
+        pc.set_bus_width(bus_width);
+        pc.write(this);
+        info.printf("\033[33mSet bus width to %s.\033[m\n", pc.str_bus_width());
+        break;
+      }
+    default:
+      {
+        Reg_host_ctrl hc(this);
+        hc.set_bus_width(bus_width);
+        hc.write(this);
+        info.printf("\033[33mSet bus width to %s.\033[m\n", hc.str_bus_width());
+        break;
+      }
+    }
 }
 
 void
