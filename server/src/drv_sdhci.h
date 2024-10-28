@@ -15,6 +15,7 @@
 
 #include "drv.h"
 #include "inout_buffer.h"
+#include "bcm2835-soc.h"
 
 /*
  * SDHCI:
@@ -1137,6 +1138,8 @@ public:
                  L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
                  l4_uint32_t host_clock, Receive_irq receive_irq);
 
+  ~Sdhci();
+
   /** Initialize controller registers. */
   void init();
 
@@ -1302,7 +1305,9 @@ private:
   Inout_buffer _adma2_desc_mem;         ///< Dataspace for descriptor memory.
   L4Re::Dma_space::Dma_addr _adma2_desc_phys; ///< Physical address of ADMA2 descs.
   Adma2_desc_64 *_adma2_desc;           ///< ADMA2 descriptor list (32/64-bit).
+  l4_addr_t _dma_offset = 0;            ///< DMA offset (bcm2835)
   Type _type;                           ///< The specific type of Sdhci.
+  Bcm2835_soc *bcm2835_soc = nullptr;   ///< For iproc: SoC control
   bool _ddr_active = false;             ///< True if double-data timing.
   bool _adma2_64 = false;               ///< True if 64-bit ADMA2.
   l4_uint32_t _host_clock;              ///< Reference clock frequency.

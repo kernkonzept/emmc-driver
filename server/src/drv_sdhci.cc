@@ -57,14 +57,55 @@ Sdhci::Sdhci(int nr,
           warn.printf("\033[33mActually using host clock of %s.\033[m\n",
               Util::readable_freq(host_clock).c_str());
         }
+
+      bcm2835_soc = new Bcm2835_soc(dma);
+      l4_uint32_t board_rev = bcm2835_soc->get_board_rev();
+      // See https://github.com/raspberrypi/linux/commit/
+      //     3d2cbb64483691c8f8cf88e17d7d581d9402ac4b
+      // ``emmc2 has different DMA constraints based on SoC revisions...
+      // The firmware will find whether the emmc2bus alias is defined, and if
+      // so, it'll edit the dma-ranges property below accordingly.´´
+      //
+      // Well, that's not possible here.
+      // See https://github.com/raspberrypi/documentation/blob/develop/
+      //     documentation/asciidoc/computers/raspberry-pi/revision-codes.adoc
+      switch ((board_rev & 0xf0'0000) >> 20)
+        {
+        case 0xc:
+        case 0xd:
+        case 0xe:
+        case 0xf:
+          /*
+           * #address-cells = <0x02>;
+           * #size-cells = <0x01>;
+           * emmc2bus: dma-ranges = <0x0 0x0 0x0 0x0 0xfc000000>;
+           */
+          break;
+        default:
+          /*
+           * #address-cells = <0x02>;
+           * #size-cells = <0x01>;
+           * emmc2bus: dma-ranges = <0x00 0xc0000000 0x00 0x00 0x40000000>;
+           */
+          _dma_offset = 0xc0000000;
+          break;
+        }
+      printf("Revision: %08x => \033[31;1mDMA offset = %08lx\033[m.\n",
+             board_rev, _dma_offset);
     }
 
-  info.printf("SDHCI controller capabilities: %08x (%d-bit). SDHCI version %s.\n",
+  info.printf("SDHCI controller capabilities: %08x (%d-bit). SDHCI %s.\n",
               cap1.raw, cap1.bit64_v3() ? 64 : 32,
               Reg_host_version(this).spec_version());
 
   if (cap1.bit64_v3())
     _adma2_64 = true;
+}
+
+Sdhci::~Sdhci()
+{
+  if (bcm2835_soc)
+    delete bcm2835_soc;
 }
 
 void
@@ -584,6 +625,7 @@ Sdhci::cmd_submit(Cmd *cmd)
 
   if (dma_addr != ~0ULL)
     {
+      dma_addr += _dma_offset;
       if (dma_adma2())
         {
           switch (_type)
@@ -1111,11 +1153,11 @@ Sdhci::adma2_set_descs_mem_region(T *desc, l4_uint64_t phys, l4_uint32_t size,
         L4Re::throw_error(-L4_EINVAL, "Implement 64-bit ADMA2 mode");
       desc->reset();
       desc->valid() = 1;
-      desc->act() = Adma2_desc_32::Act_tran;
+      desc->act() = T::Act_tran;
       // XXX SD spec also defines 26-bit data length mode
       l4_uint32_t desc_length = cxx::min(size, 32768U);
       desc->length() = desc_length;
-      desc->set_addr(phys);
+      desc->set_addr(phys + _dma_offset);
       phys += desc_length;
       size -= desc_length;
       if (!size && terminate)
@@ -1199,10 +1241,13 @@ Sdhci::adma2_dump_descs(T const *desc) const
 {
   for (;; ++desc)
     {
-      trace.printf(" %u: %08x:%08x: addr=%08llx, size=%08x, valid=%d, end=%d\n",
-                   (unsigned)(desc - (T*)_adma2_desc), desc->word1, desc->word0,
-                   desc->get_addr(), (l4_uint32_t)desc->length(),
-                   (unsigned)desc->valid(), (unsigned)desc->end());
+      printf(" %08llx: %08x:%08x: addr=%08llx, size=%08x, valid=%d, end=%d\n",
+             _adma2_desc_phys + reinterpret_cast<l4_addr_t>(desc)
+                              - reinterpret_cast<l4_addr_t>(_adma2_desc)
+                              + _dma_offset,
+             desc->word1, desc->word0, desc->get_addr(),
+             l4_uint32_t{desc->length()}, desc->valid().get(),
+             desc->end().get());
       if (desc->end())
         break;
     }
@@ -1211,8 +1256,9 @@ Sdhci::adma2_dump_descs(T const *desc) const
 void
 Sdhci::adma2_dump_descs() const
 {
-  trace.printf("ADMA descriptors (%d-bit) at phys=%08llx / virt=%08lx\n",
-               _adma2_64 ? 64 : 32, _adma2_desc_phys, (l4_addr_t)_adma2_desc);
+  printf("ADMA descriptors (%d-bit) at phys=%08llx / virt=%08lx\n",
+         _adma2_64 ? 64 : 32, _adma2_desc_phys + _dma_offset,
+         reinterpret_cast<l4_addr_t>(_adma2_desc));
   if (_adma2_64)
     adma2_dump_descs<Adma2_desc_64>(_adma2_desc);
   else
