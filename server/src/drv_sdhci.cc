@@ -535,14 +535,29 @@ Sdhci::cmd_submit(Cmd *cmd)
           trace2.printf("SDMA: addr=%08llx size=%08zx\n", dma_addr, blk_size);
         }
 
-      Reg_blk_att ba;
-      ba.blkcnt() = cmd->blockcnt;
-      if (ba.blkcnt() != cmd->blockcnt)
-        L4Re::throw_error(-L4_EINVAL, "Number of data blocks to transfer");
-      ba.blksize() = cmd->blocksize;
-      if (ba.blksize() != cmd->blocksize)
-        L4Re::throw_error(-L4_EINVAL, "Size of data blocks to transfer");
-      ba.write(this);
+      if (_type == Type::Usdhc)
+        {
+          Reg_blk_att ba;
+          ba.blkcnt() = cmd->blockcnt;
+          if (ba.blkcnt() != cmd->blockcnt)
+            L4Re::throw_error(-L4_EINVAL, "Number of data blocks to transfer");
+          ba.blksize() = cmd->blocksize;
+          if (ba.blksize() != cmd->blocksize)
+            L4Re::throw_error(-L4_EINVAL, "Size of data blocks to transfer");
+          ba.write(this);
+        }
+      else
+        {
+          Reg_blk_size bs;
+          bs.blkcnt() = cmd->blockcnt;
+          if (bs.blkcnt() != cmd->blockcnt)
+            L4Re::throw_error(-L4_EINVAL, "Number of data blocks to transfer");
+          bs.blksize() = cmd->blocksize;
+          if (bs.blksize() != cmd->blocksize)
+            L4Re::throw_error(-L4_EINVAL, "Size of data blocks to transfer");
+          bs.sdma_buf_bndry() = Reg_blk_size::Bndry_512k; // only for SDMA
+          bs.write(this);
+        }
 
       // XXX Timeout ...
 
@@ -586,20 +601,20 @@ Sdhci::cmd_submit(Cmd *cmd)
       || cmd->cmd == Mmc::Cmd21_send_tuning_block)
     {
       l4_uint8_t blksize = cmd->cmd == Mmc::Cmd19_send_tuning_block ? 64 : 128;
-      if (_type == Type::Iproc)
+      if (_type == Type::Usdhc)
+        {
+          Reg_blk_att ba;
+          ba.blkcnt() = 1;
+          ba.blksize() = blksize;
+          ba.write(this);
+        }
+      else
         {
           Reg_blk_size bz;
           bz.blksize() = blksize;
           bz.blkcnt() = 0; // ???
           bz.sdma_buf_bndry() = 7;
           bz.write(this);
-        }
-      else
-        {
-          Reg_blk_att ba;
-          ba.blkcnt() = 1;
-          ba.blksize() = blksize;
-          ba.write(this);
         }
 
       Reg_wtmk_lvl wml(this);
