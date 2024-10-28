@@ -146,7 +146,7 @@ Util::poll(l4_cpu_time_t us, Util::Poll_timeout_handler handler, char const *s)
 void
 Util::busy_wait_until(l4_uint64_t until)
 {
-  while (tsc_to_us(read_tsc() < until))
+  while (tsc_to_us(read_tsc()) < until)
     l4_barrier();
 }
 
