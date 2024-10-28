@@ -191,6 +191,9 @@ public:
   l4_uint32_t cmd_type() const
   { return cmd & Mmc::Type_mask; }
 
+  l4_uint32_t raw() const
+  { return cmd; }
+
   /** Show current command as readable string. */
   std::string cmd_to_str() const;
 

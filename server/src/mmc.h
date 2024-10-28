@@ -1391,41 +1391,66 @@ public:
     }
     l4_uint32_t raw[8]; // these bits are empty
     l4_uint32_t raw8, raw9, raw10, raw11, raw12, raw13, raw14, raw15;
+
     // Maximum Current / Power Consumption. 1 = 1mA, 2 = 2mA, ...
     /* 496 */ CXX_BITFIELD_MEMBER(16, 31, max_curr_power, raw15);
+
+    // Support bits of functions in Group 6:
     /* 480 */ CXX_BITFIELD_MEMBER( 0, 15, supp_bits_grp6, raw15);
+
+    // Support bits of functions in Group 5:
     /* 464 */ CXX_BITFIELD_MEMBER(16, 31, supp_bits_grp5, raw14);
+
+    // Support bits of functions in Group 4: Power limit
+    /* 448 */ CXX_BITFIELD_MEMBER( 0, 15, supp_bits_grp4, raw14);
     /* 448 */  CXX_BITFIELD_MEMBER( 4,  4, power_limit_180w, raw14);
     /* 448 */  CXX_BITFIELD_MEMBER( 3,  3, power_limit_288w, raw14);
     /* 448 */  CXX_BITFIELD_MEMBER( 2,  2, power_limit_216w, raw14);
     /* 448 */  CXX_BITFIELD_MEMBER( 1,  1, power_limit_144w, raw14);
     /* 448 */  CXX_BITFIELD_MEMBER( 0,  0, power_limit_072w, raw14);
-    /* 448 */ CXX_BITFIELD_MEMBER( 0, 15, supp_bits_grp4, raw14);
+
+    // Support bits of functions in Group 3: Driver strength
+    /* 432 */ CXX_BITFIELD_MEMBER(16, 31, supp_bits_grp3, raw13);
     /* 435 */  CXX_BITFIELD_MEMBER(19, 19, strength_type_d, raw13);
     /* 434 */  CXX_BITFIELD_MEMBER(18, 18, strength_type_c, raw13);
     /* 433 */  CXX_BITFIELD_MEMBER(17, 17, strength_type_a, raw13);
     /* 432 */  CXX_BITFIELD_MEMBER(16, 16, strength_type_b, raw13);
-    /* 432 */ CXX_BITFIELD_MEMBER(16, 31, supp_bits_grp3, raw13);
+
+    // Support bits of functions in Group 2: Command system
     /* 416 */ CXX_BITFIELD_MEMBER( 0, 15, supp_bits_grp2, raw13);
+
+    // Support bits of functions in Group 1: Access mode / Bus speed
+    /* 400 */ CXX_BITFIELD_MEMBER(16, 31, supp_bits_grp1, raw12);
     /* 404 */  CXX_BITFIELD_MEMBER(20, 20, acc_mode_ddr50, raw12);
     /* 403 */  CXX_BITFIELD_MEMBER(19, 19, acc_mode_sdr104, raw12);
     /* 402 */  CXX_BITFIELD_MEMBER(18, 18, acc_mode_sdr50, raw12);
     /* 401 */  CXX_BITFIELD_MEMBER(17, 17, acc_mode_sdr25, raw12);
     /* 400 */  CXX_BITFIELD_MEMBER(16, 16, acc_mode_sdr12, raw12);
-    /* 400 */ CXX_BITFIELD_MEMBER(16, 31, supp_bits_grp1, raw12);
+
+    // Function selection of function Group 6
     /* 396 */ CXX_BITFIELD_MEMBER(12, 15, fun_sel_grp6, raw12);
+    // Function selection of function Group 5
     /* 392 */ CXX_BITFIELD_MEMBER( 8, 11, fun_sel_grp5, raw12);
+    // Function selection of function Group 4
     /* 388 */ CXX_BITFIELD_MEMBER( 4,  7, fun_sel_grp4, raw12);
+    // Function selection of function Group 3
     /* 384 */ CXX_BITFIELD_MEMBER( 0,  3, fun_sel_grp3, raw12);
+    // Function selection of function Group 2
     /* 380 */ CXX_BITFIELD_MEMBER(28, 31, fun_sel_grp2, raw11);
+    // Function selection of function Group 1
     /* 376 */ CXX_BITFIELD_MEMBER(24, 27, fun_sel_grp1, raw11);
+
+    // Data structure version
     /* 368 */ CXX_BITFIELD_MEMBER(16, 23, data_struct_vers, raw11);
+
+    // Reserved for busy status of functions in Group 6 .. Group 1
     /* 352 */ CXX_BITFIELD_MEMBER( 0, 15, busy_stat_fun_grp6, raw11);
     /* 336 */ CXX_BITFIELD_MEMBER(16, 31, busy_stat_fun_grp5, raw10);
     /* 320 */ CXX_BITFIELD_MEMBER( 0, 15, busy_stat_fun_grp4, raw10);
     /* 304 */ CXX_BITFIELD_MEMBER(16, 31, busy_stat_fun_grp3, raw9);
     /* 288 */ CXX_BITFIELD_MEMBER( 0, 15, busy_stat_fun_grp2, raw9);
     /* 272 */ CXX_BITFIELD_MEMBER(16, 31, busy_stat_fun_grp1, raw8);
+
     enum { Invalid_function = 0xf };
   };
   static_assert(sizeof(Reg_switch_func) == 64, "Size of Reg_switch_func!");
@@ -1567,8 +1592,24 @@ public:
   };
 
   /**
+   * SD Specification Part 1 (Physical Layer Simplified Specification).
+   * Table 4-31: Argument of ACMD6.
+   */
+  struct Arg_acmd6_sd_set_bus_width : public Arg
+  {
+    using Arg::Arg;
+    CXX_BITFIELD_MEMBER(0, 1, bus_width, raw);
+    enum Bus_width
+    {
+      Bus_width_1bit = 0,
+      Bus_width_4bit = 2,
+    };
+  };
+
+  /**
    * SD Specifications Part 1 (Physical Layer Simplified Specification).
    * Figure 4-3: Argument of ACMD41.
+   * See also Reg_ocr.
    */
   struct Arg_acmd41_sd_send_op : public Arg
   {

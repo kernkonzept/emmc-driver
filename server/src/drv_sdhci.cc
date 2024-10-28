@@ -140,6 +140,7 @@ Sdhci::init()
     {
       if (_type == Type::Iproc)
         {
+          // SD Host Controller Simplified Specification, Figure 3-3
           sc.raw = 0;
           sc.icen() = 1;
           sc.write(this);
@@ -1171,7 +1172,7 @@ Sdhci::sdio_reset(Cmd *cmd)
 {
   if (_type == Type::Iproc)
     {
-      const int SDIO_CCCR_ABORT = 0x6;
+      const int SDIO_CCCR_ABORT = 0x6; // I/O card reset
       Mmc::Arg_cmd52_io_rw_direct a52;
       a52.address() = SDIO_CCCR_ABORT;
       a52.function() = 0;

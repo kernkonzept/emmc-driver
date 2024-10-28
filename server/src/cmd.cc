@@ -87,15 +87,16 @@ std::string Cmd::cmd_to_str() const
         }
     case  1: return "SEND_OP_COND";
     case  2: return "ALL_SEND_CID";
-    case  3: return "SET_RELATIVE_ADDR/SEND_RELATIVE_ADDR";
+    case  3: return raw() == Mmc::Cmd3_set_relative_addr ? "SET_RELATIVE_ADDR"
+                                                         : "SEND_RELATIVE_ADDR";
     case  4: return "SET_DSR";
-    case  5: return cmd_type() == Mmc::Ac ? "SLEEP_AWAKE"
-                                          : "IO_SEND_OP_COND";
-    case  6: return cmd_type() == Mmc::Adtc ? "SWITCH_FUNC"
-                                            : "SWITCH";
+    case  5: return raw() == Mmc::Cmd5_sleep_awake ? "SLEEP_AWAKE"
+                                                   : "IO_SEND_OP_COND";
+    case  6: return raw() == Mmc::Cmd6_switch_func ? "SWITCH_FUNC"
+                                                   : "SWITCH";
     case  7: return "SELECT/DESELECT_CARD";
-    case  8: return cmd_type() == Mmc::Adtc ? "SEND_EXT_CSD"
-                                            : "SEND_IF_COND";
+    case  8: return raw() == Mmc::Cmd8_send_ext_csd ? "SEND_EXT_CSD"
+                                                    : "SEND_IF_COND";
     case  9: return "SEND_CSD";
     case 10: return "SEND_CID";
     case 11: return "CMD11_obsolete";
@@ -130,6 +131,7 @@ std::string Cmd::cmd_to_str() const
     case 49: return "SET_TIME";
     case 51: return flags.app_cmd() ? "SEND_SCR"         // ACMD51, SD-only
                                     : "CMD_unknown";
+    case 52: return "IO_RW_DIRECT";                      // SDIO
     case 53: return "PROTOCOL_RD";
     case 54: return "PROTOCOL_WR";
     case 55: return "APP_CMD";

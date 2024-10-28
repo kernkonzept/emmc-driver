@@ -81,7 +81,7 @@ private:
      * This saves the preceding CMD23 for a multi-read/write command and
      * the corresponding interrupt.
      *
-     * Only for uSDHCI.
+     * Only for uSDHCI and iproc/arasan.
      */
     Auto_cmd23 = true,
   };
@@ -120,6 +120,8 @@ private:
     Wtmk_lvl              = 0x44, ///< Watermark Level
     Cap2_sdhci            = 0x44, ///< Capabilities Register (SDHCI)
     Mix_ctrl              = 0x48, ///< Mixer Control
+    Max_current           = 0x48, ///< Max Current Capabilities (SDHCI)
+    Max_current2          = 0x4c, ///< Max Current Capabilities 2 (SDHCI)
     Force_event           = 0x50, ///< Force Event
     Adma_err_status       = 0x54, ///< ADMA Error Status
     Adma_sys_addr_lo      = 0x58, ///< ADMA System Address (lower 32-bit)
@@ -195,6 +197,17 @@ private:
 
     CXX_BITFIELD_MEMBER(16, 31, blkcnt, raw); ///< Blocks count for transfer
     CXX_BITFIELD_MEMBER(12, 14, sdma_buf_bndry, raw); ///< SDMA buffer boundary
+    enum Sdma_boundary
+    {
+      Bndry_4k = 0,
+      Bndry_8k = 1,
+      Bndry_16k = 2,
+      Bndry_32k = 3,
+      Bndry_64k = 4,
+      Bndry_128k = 5,
+      Bndry_256k = 6,
+      Bndry_512k = 7,
+    };
     CXX_BITFIELD_MEMBER(0, 11, blksize, raw); ///< Transfer block size
   };
 
@@ -270,6 +283,10 @@ private:
     CXX_BITFIELD_MEMBER(24, 24, d0lsl, raw); ///< DATA0 line signal level
     CXX_BITFIELD_MEMBER(24, 31, dlsl, raw);  ///< DATA[7:0] line signal level
     // <<< uSDHC
+    // >>> SDHCI
+    CXX_BITFIELD_MEMBER(28, 28, scs, raw);   ///< Sub command status
+    CXX_BITFIELD_MEMBER(25, 25, hrvs, raw);  ///< Host regulator voltage stable
+    // <<< SDHCI
     CXX_BITFIELD_MEMBER(24, 24, clsl, raw);  ///< CMD line signal level
     CXX_BITFIELD_MEMBER(20, 23, datlsl, raw);  ///< DAT line signal level
     CXX_BITFIELD_MEMBER(20, 20, dat0lsl, raw); ///< DAT[0] line signal level
@@ -348,7 +365,7 @@ private:
         case Mmc::Bus_width::Width_8bit: dtw() = Width_8bit; break;
         }
     }
-    char const *str_bus_width() const
+    constexpr char const *str_bus_width() const
     {
       switch (dtw())
         {
@@ -368,9 +385,9 @@ private:
 
     CXX_BITFIELD_MEMBER(24, 31, wakeup, raw);
     CXX_BITFIELD_MEMBER(16, 23, gapctrl, raw);
-    // CXX_BITFIELD_MEMBER(13, 15, voltage_sel_vdd2, raw);
-    // CXX_BITFIELD_MEMBER(12, 12, bus_power_vdd2, raw);
-    CXX_BITFIELD_MEMBER(9, 11, voltage_sel, raw);
+    CXX_BITFIELD_MEMBER(13, 15, voltage_sel_vdd2, raw);
+    CXX_BITFIELD_MEMBER(12, 12, bus_power_vdd2, raw); ///< SD bus power VDD2
+    CXX_BITFIELD_MEMBER(9, 11, voltage_sel, raw); ///< SD bus volt select VDD1
     enum Voltage_mode
     {
       Voltage_33 = 7,
@@ -378,7 +395,7 @@ private:
       Voltage_18 = 5,
       Voltage_unsupported = 0,
     };
-    CXX_BITFIELD_MEMBER(8, 8, bus_power, raw);
+    CXX_BITFIELD_MEMBER(8, 8, bus_power, raw); ///< SD bus power VDD1
     CXX_BITFIELD_MEMBER(7, 7, cdtest_en, raw);
     CXX_BITFIELD_MEMBER(6, 6, cdtest_ins, raw);
     CXX_BITFIELD_MEMBER(5, 5, bbit8, raw);     ///< 8-bit bus
@@ -392,6 +409,36 @@ private:
     };
     CXX_BITFIELD_MEMBER(2, 2, hispd, raw);     ///< 1=high speed
     CXX_BITFIELD_MEMBER(1, 1, bbit4, raw);     ///< 4-bit bus
+    enum
+    {
+      Width_1bit = 0,
+      Width_4bit = 1,
+      Width_8bit = 2,
+    };
+    void set_bus_width(Mmc::Bus_width bus_width)
+    {
+      switch (bus_width)
+        {
+        case Mmc::Bus_width::Width_1bit:
+          bbit8() = 0;
+          bbit4() = 0;
+          break;
+        case Mmc::Bus_width::Width_4bit:
+          bbit8() = 0;
+          bbit4() = 1;
+          break;
+        case Mmc::Bus_width::Width_8bit:
+          bbit8() = 1;
+          bbit4() = 0;
+          break;
+        }
+    }
+    constexpr char const *str_bus_width() const
+    {
+      if (bbit8())      return "8-bit";
+      else if (bbit4()) return "4-bit";
+      else              return "1-bit";
+    }
     CXX_BITFIELD_MEMBER(0, 0, lctl, raw);      ///< LED control
   };
 
@@ -443,8 +490,9 @@ private:
     CXX_BITFIELD_MEMBER(8, 15, clk_freq8, raw); ///< base divider LSBs
     CXX_BITFIELD_MEMBER(6, 7, clk_freq_ms2, raw); ///< base divider MSBs
     CXX_BITFIELD_MEMBER(5, 5, clk_gensel, raw); ///< mode of clock
+    // 0=base_clock, 1=base_clock/2, 2=base_clock/4, 3=base_clock/6, ...
     l4_uint32_t clock_base_divider10() const
-    { return clk_freq8() + (clk_freq_ms2() << 8); }
+    { return (l4_uint32_t{clk_freq8()} + (clk_freq_ms2() << 8)) * 2; }
     // <<< SD: 3.00
 
     // >>> SDHCI
@@ -462,7 +510,9 @@ private:
 
     CXX_BITFIELD_MEMBER(28, 28, dmae, raw);  ///< DMA error
     CXX_BITFIELD_MEMBER(26, 26, tne, raw);   ///< Tuning error
+    CXX_BITFIELD_MEMBER(25, 25, admae, raw); ///< ADMA error (iproc)
     CXX_BITFIELD_MEMBER(24, 24, ac12e, raw); ///< Auto CMD12 error
+    CXX_BITFIELD_MEMBER(23, 23, lime, raw);  ///< Limit error (iproc)
     CXX_BITFIELD_MEMBER(22, 22, debe, raw);  ///< Data end bit error
     CXX_BITFIELD_MEMBER(21, 21, dce, raw);   ///< Data CRC error
     CXX_BITFIELD_MEMBER(20, 20, dtoe, raw);  ///< Data timeout error
@@ -523,7 +573,9 @@ private:
 
     CXX_BITFIELD_MEMBER(28, 28, dmaesen, raw);  ///< DMA error SE
     CXX_BITFIELD_MEMBER(26, 26, tnesen, raw);   ///< Tuning error SE
+    CXX_BITFIELD_MEMBER(25, 25, admaesen, raw); ///< ADMA error (iproc) SE
     CXX_BITFIELD_MEMBER(24, 24, ac12sene, raw); ///< Auto CMD12 error SE
+    CXX_BITFIELD_MEMBER(23, 23, limesen, raw);  ///< Limit error (iproc) SE
     CXX_BITFIELD_MEMBER(22, 22, debesen, raw);  ///< Data end bit error SE
     CXX_BITFIELD_MEMBER(21, 21, dcesen, raw);   ///< Data CRC error SE
     CXX_BITFIELD_MEMBER(20, 20, dtoesen, raw);  ///< Data timeout error SE
@@ -572,7 +624,9 @@ private:
 
     CXX_BITFIELD_MEMBER(28, 28, dmaeien, raw);  ///< DMA error status IE
     CXX_BITFIELD_MEMBER(26, 26, tneien, raw);   ///< Tuning error IE
+    CXX_BITFIELD_MEMBER(25, 25, admaeien, raw); ///< ADMA error IE (iproc) IE
     CXX_BITFIELD_MEMBER(24, 24, ac12iene, raw); ///< Auto CMD12 error IE
+    CXX_BITFIELD_MEMBER(23, 23, limeien, raw);  ///< Limit error IE (iproc) IE
     CXX_BITFIELD_MEMBER(22, 22, debeien, raw);  ///< Data end bit error IE
     CXX_BITFIELD_MEMBER(21, 21, dceien, raw);   ///< Data CRC error IE
     CXX_BITFIELD_MEMBER(20, 20, dtoeien, raw);  ///< Data timeout error IE
@@ -638,9 +692,16 @@ private:
   {
     using Reg::Reg;
 
+    CXX_BITFIELD_MEMBER(31, 31, presvlen, raw);   ///< Preset value enable
+    CXX_BITFIELD_MEMBER(30, 30, asyninten, raw);  ///< Asynchronous interrupt en
+    CXX_BITFIELD_MEMBER(29, 29, bit64, raw);      ///< 64-bit addressing
+    CXX_BITFIELD_MEMBER(28, 28, hostv4, raw);     ///< Host version 4 enable
+    CXX_BITFIELD_MEMBER(27, 27, cmd23en, raw);    ///< CMD23 enable
+    CXX_BITFIELD_MEMBER(26, 26, adma2len26, raw); ///< ADMA2 26-bit data length
+    CXX_BITFIELD_MEMBER(24, 24, uhs2en, raw);     ///< UHS-II interface enable
     CXX_BITFIELD_MEMBER(23, 23, tuned, raw);
     CXX_BITFIELD_MEMBER(22, 22, tuneon, raw);
-    CXX_BITFIELD_MEMBER(19, 19, v18, raw);      ///< 1.8V select?
+    CXX_BITFIELD_MEMBER(19, 19, v18, raw);        ///< 1.8V signaling enable
     CXX_BITFIELD_MEMBER(16, 18, uhsmode, raw);
     enum
     {
@@ -769,7 +830,7 @@ private:
     CXX_BITFIELD_MEMBER(0, 0, sdr50_support, raw);
   };
 
-  /// 0x48: Mixer Control
+  /// 0x48: Mixer Control (uSDHC)
   struct Reg_mix_ctrl : public Reg<Mix_ctrl>
   {
     using Reg::Reg;
@@ -794,6 +855,28 @@ private:
     // <<< uSDHC
   };
 
+  /// 0x48: Maximum Current Capabilities (SDHCI)
+  struct Reg_max_current : public Reg<Max_current>
+  {
+    using Reg::Reg;
+
+    CXX_BITFIELD_MEMBER(16, 23, max_current_18v_vdd1, raw);
+    CXX_BITFIELD_MEMBER(8, 15, max_current_30v_vdd1, raw);
+    CXX_BITFIELD_MEMBER(0, 7, max_current_33v_vdd1, raw);
+
+    unsigned max_current(l4_uint8_t val)
+    { return val * 4; }
+  };
+
+  /// 0x4c: Maximum Current Capabilities, bits 32-63 (SDHCI)
+  struct Reg_max_current2 : public Reg<Max_current2>
+  {
+    using Reg::Reg;
+
+    CXX_BITFIELD_MEMBER(0, 7, max_current_18v_vdd2, raw);
+  };
+
+  /// 0x54: ADMA Error status
   struct Reg_adma_err_status : public Reg<Adma_err_status>
   {
     using Reg::Reg;
@@ -923,7 +1006,7 @@ private:
 
     CXX_BITFIELD_MEMBER(24, 31, vend_vers, raw); ///< Vendor version number.
     CXX_BITFIELD_MEMBER(16, 23, spec_vers, raw); ///< Spec version number.
-    char const *spec_version() const
+    constexpr char const *spec_version() const
     {
       switch (spec_vers())
         {
@@ -1015,18 +1098,14 @@ private:
   };
   static_assert(sizeof(Adma2_desc_64) == 16, "Size of Adma2_desc_64!");
 
-  static char const *type_name(Type t)
+  static constexpr char const *type_name(Type t)
   {
     switch (t)
       {
-      case Type::Sdhci:
-        return "SDHCI";
-      case Type::Usdhc:
-        return "uSDHC";
-      case Type::Iproc:
-        return "IProc";
-      default:
-        return "<unknown type>";
+      case Type::Sdhci: return "SDHCI";
+      case Type::Usdhc: return "uSDHC";
+      case Type::Iproc: return "IProc";
+      default:          return "<unknown type>";
       }
   }
 
@@ -1093,7 +1172,7 @@ public:
   };
 
   /** Return true if the power limit is supported by the controller. */
-  bool supp_power_limit(Mmc::Power_limit power) const
+  constexpr bool supp_power_limit(Mmc::Power_limit power) const
   {
     switch (power)
       {
@@ -1112,7 +1191,7 @@ public:
   bool tuning_finished(bool *success);
 
   /** Return true if the card is busy. */
-  bool card_busy() const
+  constexpr bool card_busy() const
   {
     switch (_type)
       {
