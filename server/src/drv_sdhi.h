@@ -27,6 +27,7 @@ public:
   static bool dma_adma2() { return false; }
   static bool auto_cmd12() { return false; }
   static bool auto_cmd23() { return false; }
+  static bool bounce_buffer_if_required() { return false; }
 
 private:
 

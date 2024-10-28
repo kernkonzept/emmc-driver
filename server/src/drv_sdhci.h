@@ -51,6 +51,9 @@ public:
   bool dma_adma2() const
   { return Dma_adma2; }
 
+  static bool bounce_buffer_if_required()
+  { return true; }
+
 private:
   enum
   {

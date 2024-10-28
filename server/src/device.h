@@ -149,9 +149,9 @@ private:
    */
   l4_size_t max_size() const override
   {
-    return _drv.provided_bounce_buffer() ?
-      cxx::min(_drv._bb_size / _max_seg, (l4_size_t)Max_size) :
-      (l4_size_t)Max_size;
+    return _drv.provided_bounce_buffer()
+      ? cxx::min(_drv._bb_size / _max_seg, l4_size_t{Max_size})
+      : l4_size_t{Max_size};
   }
 
   /**
@@ -265,7 +265,7 @@ private:
   void show_csd(Mmc::Reg_csd const &csd);
   static std::string readable_product(std::string const s);
 
-  void bounce_buffer_allocate(char const *cap_name);
+  void claim_bounce_buffer(char const *cap_name);
 
   /// Device type (must be null-terminated)
   char _hid[Hid_max_length];

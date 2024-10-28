@@ -88,17 +88,26 @@ Device<Driver>::Device(int nr, l4_addr_t mmio_addr,
   else
     _irq->unmask();
 
-  bounce_buffer_allocate("bbds");
+  claim_bounce_buffer("bbds");
+
+  info.printf("\033[33mMax request size %s.\033[m\n",
+              Util::readable_size(max_size()).c_str());
 }
 
 template <class Driver>
 void
-Device<Driver>::bounce_buffer_allocate(char const *cap_name)
+Device<Driver>::claim_bounce_buffer(char const *cap_name)
 {
   auto *env = L4Re::Env::env();
   auto cap = env->get_cap<L4Re::Dataspace>(cap_name);
   if (!cap.is_valid())
     return;
+
+  if (!_drv.bounce_buffer_if_required())
+    {
+      warn.printf("\033[31;1mBounce buffer provided but not used by driver.\033[m\n");
+      return;
+    }
 
   l4_size_t size = cap->size();
   if (size < (64 << 10))
@@ -129,7 +138,7 @@ Device<Driver>::bounce_buffer_allocate(char const *cap_name)
   _drv._bb_phys = phys;
   _drv._bb_virt = (l4_addr_t)_bb_region.get();
 
-  warn.printf("\033[31;1mUsing bounce buffer of %s @ %08llx.\033[m\n",
+  warn.printf("\033[31;1mUsing bounce buffer of %s @ %08llx if required.[m\n",
               Util::readable_size(size).c_str(), phys);
 }
 
