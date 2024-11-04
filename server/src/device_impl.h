@@ -460,7 +460,8 @@ Device<Driver>::start_device_scan(Errand::Callback const &cb)
     return;
 
   _drv.set_clock_and_timing(400 * KHz, Mmc::Legacy);
-  _drv.sdio_reset(cmd);
+
+  reset_sdio(cmd);
 
   _init_thread = std::thread([this, cmd, cb]
     {
@@ -909,6 +910,34 @@ Device<Driver>::adapt_ocr(Mmc::Reg_ocr ocr_dev, Mmc::Arg_acmd41_sd_send_op *a41)
 }
 
 template <class Driver>
+void
+Device<Driver>::reset_sdio(Cmd *cmd)
+{
+  info.printf("Resetting sdio...\n");
+
+  const int Sdio_cccr_abort = 0x6; // I/O card reset
+  Mmc::Arg_cmd52_io_rw_direct a52;
+  a52.address() = Sdio_cccr_abort;
+  a52.function() = 0;
+  a52.write() = 0;
+  cmd->init_arg(Mmc::Cmd52_io_rw_direct, a52.raw);
+  cmd->flags.expected_error() = true;
+  cmd_exec(cmd);
+  if (!cmd->error())
+    L4Re::throw_error(-L4_EIO, "IO_RW_DIRECT (read) succeeded");
+
+  a52.raw = 0;
+  a52.write_data() = 0x8;
+  a52.address() = Sdio_cccr_abort;
+  a52.function() = 0;
+  a52.write() = 1;
+
+  cmd->init_arg(Mmc::Cmd52_io_rw_direct, a52.raw);
+  cmd->flags.expected_error() = true;
+  cmd_exec(cmd);
+}
+
+template <class Driver>
 bool
 Device<Driver>::power_up_sd(Cmd *cmd)
 {
@@ -916,15 +945,27 @@ Device<Driver>::power_up_sd(Cmd *cmd)
 
   _rca = 0;
 
-  cmd->init(Mmc::Cmd5_io_send_op_cond);
-  cmd->flags.expected_error() = true;
-  cmd_exec(cmd);
-  if (!cmd->error())
+  // The following command would detect an SDIO card and it would also enable
+  // the IO part of the SDIO. Actually we assume that an SDIO card with SD
+  // functions does not provide the SDIO interface by default.
+  if (0)
     {
-      info.printf("SDIO card detected (R7=%08x)!\n",
-                  Mmc::Rsp_r4(cmd->resp[0]).raw);
-      L4Re::throw_error(-L4_EINVAL, "IO_SEND_OP_COND succeeded");
-      // XXX implement SDIO card support
+      cmd->init(Mmc::Cmd5_io_send_op_cond);
+      cmd->flags.expected_error() = true;
+      cmd_exec(cmd);
+      if (!cmd->error())
+        {
+          // SDIO spec 3.0 / section 3.3:
+          // Actually an SD memory only card may respond to CMD5. The proper
+          // response for a memory only card would be Memory Present = 1 and
+          // Number of I/O Functions = 0.
+          Mmc::Rsp_r4 rsp{cmd->resp[0]};
+          if (rsp.mem_pres() != 1 || rsp.num_io() != 0)
+            {
+              info.printf("SDIO card detected (R4=%08x)!\n", rsp.raw);
+              L4Re::throw_error(-L4_EINVAL, "IO_SEND_OP_COND succeeded");
+            }
+        }
     }
 
   // Get SD card's operating conditions.

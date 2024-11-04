@@ -1416,34 +1416,6 @@ Sdhci::adma2_dump_descs() const
 }
 
 void
-Sdhci::sdio_reset(Cmd *cmd)
-{
-  if (_type == Type::Iproc)
-    {
-      const int SDIO_CCCR_ABORT = 0x6; // I/O card reset
-      Mmc::Arg_cmd52_io_rw_direct a52;
-      a52.address() = SDIO_CCCR_ABORT;
-      a52.function() = 0;
-      a52.write() = 0;
-      cmd->init_arg(Mmc::Cmd52_io_rw_direct, a52.raw);
-      cmd->flags.expected_error() = true;
-      cmd_exec(cmd);
-      if (!cmd->error())
-        L4Re::throw_error(-L4_EIO, "IO_RW_DIRECT (read) succeeded");
-
-      a52.raw = 0;
-      a52.write_data() = 0x8;
-      a52.address() = SDIO_CCCR_ABORT;
-      a52.function() = 0;
-      a52.write() = 1;
-
-      cmd->init_arg(Mmc::Cmd52_io_rw_direct, a52.raw);
-      cmd->flags.expected_error() = true;
-      cmd_exec(cmd);
-    }
-}
-
-void
 Sdhci::Reg_write_delay::write_delayed(Sdhci *sdhci, Regs offs, l4_uint32_t val)
 {
   sdhci->write_delay();

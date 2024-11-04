@@ -242,6 +242,7 @@ private:
   void cmd_exec(Cmd *cmd)
   { _drv.cmd_exec(cmd); }
 
+  void reset_sdio(Cmd *cmd);
   bool power_up_sd(Cmd *cmd);
   bool power_up_mmc(Cmd *cmd);
 

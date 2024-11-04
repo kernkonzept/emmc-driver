@@ -1246,8 +1246,6 @@ public:
    */
   bool xpc_supported(Mmc::Voltage voltage) const;
 
-  void sdio_reset(Cmd *cmd);
-
   /** Dump all controller registers if 'warn' debug level is enabled. */
   void dump() const;
 
