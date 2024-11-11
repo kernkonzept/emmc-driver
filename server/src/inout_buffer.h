@@ -125,7 +125,7 @@ public:
   T *get(unsigned offset = 0) const
   { return reinterpret_cast<T *>(_region.get() + offset); }
 
-  l4_addr_t pget(unsigned offset = 0) const
+  l4_uint64_t pget(unsigned offset = 0) const
   { return _paddr + offset; }
 
   l4_size_t size() const

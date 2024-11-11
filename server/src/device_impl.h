@@ -66,6 +66,11 @@ Device<Driver>::Device(int nr, l4_addr_t mmio_addr,
 {
   _drv.mask_interrupts();
 
+  if (!_drv.dma_accessible(_io_buf.pget(), _io_buf.size()))
+    L4Re::throw_error_fmt(-L4_EINVAL,
+                          "IO buffer at %08llx-%08llx not accessible by DMA",
+                          _io_buf.pget(), _io_buf.pget() + _io_buf.size());
+
   L4Re::chkcap(_irq = L4Re::Util::cap_alloc.alloc<L4::Irq>(),
                "Allocate IRQ capability slot.");
   L4Re::chksys(L4Re::Env::env()->factory()->create(_irq),
@@ -137,6 +142,11 @@ Device<Driver>::claim_bounce_buffer(char const *cap_name)
   _drv._bb_size = size;
   _drv._bb_phys = phys;
   _drv._bb_virt = (l4_addr_t)_bb_region.get();
+
+  if (!_drv.dma_accessible(phys, size))
+    L4Re::throw_error_fmt(-L4_EINVAL,
+                          "Bounce buffer at %08llx-%08llx not accessible by DMA",
+                          phys, phys + size);
 
   warn.printf("\033[31;1mUsing bounce buffer of %s @ %08llx if required.[m\n",
               Util::readable_size(size).c_str(), phys);

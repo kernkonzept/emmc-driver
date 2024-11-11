@@ -60,8 +60,10 @@ Bcm2835_mbox::Bcm2835_mbox(L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma)
         L4Re::Dma_space::Direction::Bidirectional,
         L4Re::Rm::F::Cache_uncached)
 {
-  if (_data.pget() > 0xffffffffU)
-    L4Re::throw_error(-L4_ENOMEM, "bcm2835 mbox DMA memory beyond 4GiB limit");
+  if (_data.pget() > 0x3fffffff || _data.pget() + _data.size() > 0x40000000)
+    L4Re::throw_error_fmt(-L4_EINVAL,
+                          "bcm2835 mbox DMA memory at %08llx-%08llx beyond 1GB",
+                          _data.pget(), _data.pget() + _data.size());
   if (_data.pget() & 0xf)
     L4Re::throw_error(-L4_ENOMEM, "bcm2835 mbox DMA memory not aligned");
 
@@ -82,7 +84,7 @@ Bcm2835_mbox::Bcm2835_mbox(L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma)
         {
           _regs = new Hw::Mmio_map_register_block<32>(mbox.bus_cap(), res.start);
           _data_virt = _data.get<void *>();
-          _data_phys = _data.pget(); // XXX | 0xc0000000?
+          _data_phys = _data.pget(); // no DMA offset!
           return;
         }
     }

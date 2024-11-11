@@ -108,12 +108,9 @@ struct Drv : public Drv_base
   bool provided_bounce_buffer() const
   { return _bb_size != 0; }
 
-  /**
-   * Return true if this DMA region requires a bounce buffer because it's
-   * located beyond 4GiB.
-   */
-  static bool region_requires_bounce_buffer(l4_addr_t dma_addr, l4_size_t size)
-  { return dma_addr + size > (1ULL << 32); }
+  /** Return true if this memory region is accessible by the DMA engine. */
+  bool dma_accessible(l4_uint64_t dma_addr, l4_size_t size)
+  { return dma_addr <= _dma_limit && dma_addr + size - 1 <= _dma_limit; }
 
   /**
    * Perform the sdio reset, if necessary. The default is to not do anything.
@@ -128,6 +125,8 @@ struct Drv : public Drv_base
   L4Re::Dma_space::Dma_addr _bb_phys;   ///< Bounce buffer: DMA address.
   l4_addr_t _bb_virt = 0;               ///< Bounce buffer: virtual address.
   l4_size_t _bb_size = 0;               ///< Bounce buffer: size.
+  L4Re::Dma_space::Dma_addr _dma_limit = ~0ULL;
+                                        /// Largest device DMA-accessible address.
 };
 
 }; // namespace Emmc

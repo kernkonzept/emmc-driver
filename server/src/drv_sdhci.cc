@@ -40,6 +40,9 @@ Sdhci::Sdhci(int nr,
 {
   trace.printf("Assuming %s eMMC controller.\n", type_name(type));
 
+  // Assume DMA limit of 32-bit / 4GB. SDHCI could also handle 64-bit addresses.
+  _dma_limit = 0xffffffffULL;
+
   Reg_cap1_sdhci cap1(this);
   if (_type == Type::Iproc || _type == Type::Bcm2711)
     {
@@ -62,6 +65,11 @@ Sdhci::Sdhci(int nr,
       if (_type == Type::Bcm2711)
         init_bcm2711(dma);
     }
+
+  if (!dma_accessible(_adma2_desc_phys, _adma2_desc_mem.size()))
+    L4Re::throw_error_fmt(-L4_EINVAL,
+                          "ADMA2 descriptors at %08llx-%08llx not accessible by DMA",
+                          _adma2_desc_phys, _adma2_desc_phys + _adma2_desc_mem.size());
 
   info.printf("SDHCI controller capabilities: %08x (%d-bit). SDHCI %s.\n",
               cap1.raw, cap1.bit64_v3() ? 64 : 32,
@@ -217,18 +225,22 @@ Sdhci::init_bcm2711(L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma)
    *      emmc2bus: dma-ranges = <0x0 0x0 0x0 0x0 0xfc000000>;
    */
   Bcm2835_soc_rev board_rev{bcm2835_soc->get_board_rev()};
-  _dma_offset = 0xc0000000; // default: old
+  _dma_offset = 0xc0000000UL; // default: assume old revision
+  _dma_limit = 0x3fffffffULL;
   if (board_rev.new_style())
     {
       // Try to detect the C0 stepping
       switch (board_rev.type())
         {
         case 0x11: // 4B
-          if (board_rev.revision() > 2)
-            _dma_offset = 0; // new
+          if (board_rev.revision() <= 2)
+            break;
+          _dma_offset = 0UL; // new revision
+          _dma_limit = 0xffffffffULL; // XXX is this correct?
           break;
         case 0x13: // 400
-          _dma_offset = 0; // new
+          _dma_offset = 0UL; // new revision
+          _dma_limit = 0xffffffffULL; // XXX is this correct?
           break;
         }
     }
@@ -547,7 +559,7 @@ Sdhci::cmd_submit(Cmd *cmd)
           if (cmd->blocks) // this implies cmd->inout() == true
             {
               if (provided_bounce_buffer()
-                  && region_requires_bounce_buffer(cmd->blocks->dma_addr, blk_size))
+                  && !dma_accessible(cmd->blocks->dma_addr, blk_size))
                 {
                   if (cmd->flags.inout_read())
                     {
@@ -852,7 +864,7 @@ Sdhci::cmd_fetch_response(Cmd *cmd)
       for (auto const *b = cmd->blocks; b; b = b->next.get())
         {
           l4_uint32_t b_size = b->num_sectors << 9;
-          if (region_requires_bounce_buffer(b->dma_addr, b_size))
+          if (!dma_accessible(b->dma_addr, b_size))
             {
               l4_cache_inv_data(_bb_virt + offset, _bb_virt + offset + b_size);
               memcpy(b->virt_addr, (void *)(_bb_virt + offset), b_size);
@@ -1361,7 +1373,7 @@ Sdhci::adma2_set_descs(T *descs, Cmd *cmd)
       l4_uint64_t b_addr = b->dma_addr;
       l4_uint32_t b_size = b->num_sectors << 9;
       if (provided_bounce_buffer()
-          && region_requires_bounce_buffer(b_addr, b_size))
+          && !dma_accessible(b_addr, b_size))
         {
           if (bb_offs + b_size > _bb_size)
             L4Re::throw_error(-L4_EINVAL, "Bounce buffer too small");
