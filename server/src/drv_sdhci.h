@@ -15,7 +15,6 @@
 
 #include "drv.h"
 #include "inout_buffer.h"
-#include "bcm2835-soc.h"
 
 /*
  * SDHCI:
@@ -23,6 +22,8 @@
  * iproc/arasan:
  *  ``BROADCOM BCM2835 ARM Peripherals / External Mass Media Controller´´
  */
+
+class Bcm2835_mbox;
 
 namespace Emmc {
 
@@ -1317,7 +1318,7 @@ private:
   Adma2_desc_64 *_adma2_desc;           ///< ADMA2 descriptor list (32/64-bit).
   l4_addr_t _dma_offset = 0;            ///< DMA offset (bcm2835)
   Type _type;                           ///< The specific type of Sdhci.
-  Bcm2835_soc *bcm2835_soc = nullptr;   ///< For iproc: SoC control
+  Bcm2835_mbox *bcm2835_mbox = nullptr; ///< For iproc: SoC control over mailbox
   bool _ddr_active = false;             ///< True if double-data timing.
   bool _adma2_64 = false;               ///< True if 64-bit ADMA2.
   l4_uint32_t _host_clock;              ///< Reference clock frequency.

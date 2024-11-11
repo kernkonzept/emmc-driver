@@ -9,6 +9,7 @@
  * \file backend for SDHCI used by i.MX8.
  */
 
+#include <l4/mbox/mbox.h>
 #include <l4/sys/cache.h>
 
 #include "cmd.h"
@@ -84,8 +85,8 @@ Sdhci::Sdhci(int nr,
 
 Sdhci::~Sdhci()
 {
-  if (bcm2835_soc)
-    delete bcm2835_soc;
+  if (bcm2835_mbox)
+    delete bcm2835_mbox;
 }
 
 void
@@ -197,7 +198,13 @@ Sdhci::init()
 void
 Sdhci::init_bcm2711(L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma)
 {
-  bcm2835_soc = new Bcm2835_soc(dma);
+  auto *e = L4Re::Env::env();
+  auto vbus = L4Re::chkcap(e->get_cap<L4vbus::Vbus>("vbus_mbox"),
+                           "Get 'vbus' capability for mbox device.",
+                           -L4_ENOENT);
+
+  static Dbg log{1, "mbox"};
+  bcm2835_mbox = new Bcm2835_mbox(vbus, log, dma);
 
   /* See https://github.com/raspberrypi/linux/commit/
    *     3d2cbb64483691c8f8cf88e17d7d581d9402ac4b
@@ -224,7 +231,7 @@ Sdhci::init_bcm2711(L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma)
    *      #size-cells = <0x01>;
    *      emmc2bus: dma-ranges = <0x0 0x0 0x0 0x0 0xfc000000>;
    */
-  Bcm2835_soc_rev board_rev{bcm2835_soc->get_board_rev()};
+  Bcm2835_mbox::Soc_rev board_rev{bcm2835_mbox->get_board_rev()};
   _dma_offset = 0xc0000000UL; // default: assume old revision
   _dma_limit = 0x3fffffffULL;
   if (board_rev.new_style())
@@ -1154,8 +1161,8 @@ Sdhci::set_voltage(Mmc::Voltage voltage)
           gpio_set_value = 0;
         else
           gpio_set_value = 1;
-        bcm2835_soc->set_fw_gpio(Bcm2835_soc::Raspi_exp_gpio_vdd_sd_io_sel,
-                                 gpio_set_value);
+        bcm2835_mbox->set_fw_gpio(Bcm2835_mbox::Raspi_exp_gpio_vdd_sd_io_sel,
+                                  gpio_set_value);
         delay(10);
       }
       [[fallthrough]];
