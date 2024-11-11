@@ -41,11 +41,11 @@ Sdhci::Sdhci(int nr,
   trace.printf("Assuming %s eMMC controller.\n", type_name(type));
 
   Reg_cap1_sdhci cap1(this);
-  if (_type == Type::Iproc)
+  if (_type == Type::Iproc || _type == Type::Bcm2711)
     {
       // Fine-grained clock required for Reg_write_delay::write_delayed().
       if (!Util::tsc_available())
-        L4Re::throw_error(-L4_EINVAL, "Iproc requires fine-grained clock");
+        L4Re::throw_error(-L4_EINVAL, "Iproc/Bcm2711 require fine-grained clock");
 
       _write_delay = 10; // 2.5 SD clock write cycles @ 400 KHz
       if (cap1.base_freq() > 0) // field limits frequency to 255 MHz
@@ -59,40 +59,8 @@ Sdhci::Sdhci(int nr,
               Util::readable_freq(host_clock).c_str());
         }
 
-      bcm2835_soc = new Bcm2835_soc(dma);
-      l4_uint32_t board_rev = bcm2835_soc->get_board_rev();
-      // See https://github.com/raspberrypi/linux/commit/
-      //     3d2cbb64483691c8f8cf88e17d7d581d9402ac4b
-      // ``emmc2 has different DMA constraints based on SoC revisions...
-      // The firmware will find whether the emmc2bus alias is defined, and if
-      // so, it'll edit the dma-ranges property below accordingly.´´
-      //
-      // Well, that's not possible here.
-      // See https://github.com/raspberrypi/documentation/blob/develop/
-      //     documentation/asciidoc/computers/raspberry-pi/revision-codes.adoc
-      switch ((board_rev & 0xf0'0000) >> 20)
-        {
-        case 0xc:
-        case 0xd:
-        case 0xe:
-        case 0xf:
-          /*
-           * #address-cells = <0x02>;
-           * #size-cells = <0x01>;
-           * emmc2bus: dma-ranges = <0x0 0x0 0x0 0x0 0xfc000000>;
-           */
-          break;
-        default:
-          /*
-           * #address-cells = <0x02>;
-           * #size-cells = <0x01>;
-           * emmc2bus: dma-ranges = <0x00 0xc0000000 0x00 0x00 0x40000000>;
-           */
-          _dma_offset = 0xc0000000;
-          break;
-        }
-      printf("Revision: %08x => \033[31;1mDMA offset = %08lx\033[m.\n",
-             board_rev, _dma_offset);
+      if (_type == Type::Bcm2711)
+        init_bcm2711(dma);
     }
 
   info.printf("SDHCI controller capabilities: %08x (%d-bit). SDHCI %s.\n",
@@ -182,7 +150,7 @@ Sdhci::init()
     }
   else
     {
-      if (_type == Type::Iproc)
+      if (_type == Type::Iproc || _type == Type::Bcm2711)
         {
           // SD Host Controller Simplified Specification, Figure 3-3
           sc.raw = 0;
@@ -208,7 +176,7 @@ Sdhci::init()
       Reg_clk_tune_ctrl_status().write(this);
 
       Reg_host_ctrl hc(this);
-      if (_type == Type::Iproc)
+      if (_type == Type::Iproc || _type == Type::Bcm2711)
         {
           hc.voltage_sel() = Reg_host_ctrl::Voltage_33;
           hc.bus_power() = 1;
@@ -216,6 +184,45 @@ Sdhci::init()
       hc.dmamod() = dma_adma2() ? hc.Adma32 : hc.Sdma;
       hc.write(this);
     }
+}
+
+void
+Sdhci::init_bcm2711(L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma)
+{
+  bcm2835_soc = new Bcm2835_soc(dma);
+  l4_uint32_t board_rev = bcm2835_soc->get_board_rev();
+  // See https://github.com/raspberrypi/linux/commit/
+  //     3d2cbb64483691c8f8cf88e17d7d581d9402ac4b
+  // ``emmc2 has different DMA constraints based on SoC revisions...
+  // The firmware will find whether the emmc2bus alias is defined, and if so,
+  // it'll edit the dma-ranges property below accordingly.´´
+  //
+  // Well, that's not possible here.
+  // See https://github.com/raspberrypi/documentation/blob/develop/
+  //     documentation/asciidoc/computers/raspberry-pi/revision-codes.adoc
+  switch ((board_rev & 0xf0'0000) >> 20)
+    {
+    case 0xc:
+    case 0xd:
+    case 0xe:
+    case 0xf:
+      /*
+       * #address-cells = <0x02>;
+       * #size-cells = <0x01>;
+       * emmc2bus: dma-ranges = <0x0 0x0 0x0 0x0 0xfc000000>;
+       */
+      break;
+    default:
+      /*
+       * #address-cells = <0x02>;
+       * #size-cells = <0x01>;
+       * emmc2bus: dma-ranges = <0x00 0xc0000000 0x00 0x00 0x40000000>;
+       */
+      _dma_offset = 0xc0000000;
+      break;
+    }
+  printf("Revision: %08x => \033[31;1mDMA offset = %08lx\033[m.\n",
+         board_rev, _dma_offset);
 }
 
 Cmd *
@@ -467,8 +474,8 @@ Sdhci::cmd_submit(Cmd *cmd)
 
   L4Re::Dma_space::Dma_addr dma_addr = ~0ULL;
 
-  if (No_dma_during_setup
-      && cmd->flags.has_data() && _type == Type::Iproc && cmd->data_virt != 0)
+  if (No_dma_during_setup && cmd->flags.has_data() && cmd->data_virt != 0
+      && (_type == Type::Iproc || _type == Type::Bcm2711))
     {
       Reg_blk_size bz;
       bz.blkcnt() = cmd->blockcnt;
@@ -642,6 +649,7 @@ Sdhci::cmd_submit(Cmd *cmd)
             break;
           }
         case Type::Iproc:
+        case Type::Bcm2711:
           {
             Reg_autocmd12_err_status es(this);
             es.smp_clk_sel() = 0;
@@ -678,6 +686,7 @@ Sdhci::cmd_submit(Cmd *cmd)
                 mc.ac23en() = 0;
               break;
             case Type::Iproc:
+            case Type::Bcm2711:
               if (cmd->flags.auto_cmd23())
                 {
                   assert(auto_cmd23());
@@ -708,8 +717,8 @@ Sdhci::cmd_submit(Cmd *cmd)
   Reg_int_status(~0U).write(this); // clear all IRQs
   Reg_int_status_en se;
   se.enable_ints(cmd);
-  if (No_dma_during_setup
-      && cmd->flags.has_data() && _type == Type::Iproc && cmd->data_virt != 0)
+  if (No_dma_during_setup && cmd->flags.has_data() && cmd->data_virt != 0
+      && (_type == Type::Iproc || _type == Type::Bcm2711))
     {
       se.brrsen() = 1;
       se.bwrsen() = 1;
@@ -885,7 +894,7 @@ Sdhci::set_clock_and_timing(l4_uint32_t freq, Mmc::Timing timing, bool strobe)
     _ddr_active = true;
   else
     _ddr_active = false;
-  if (_type == Type::Iproc)
+  if (_type == Type::Iproc || _type == Type::Bcm2711)
     {
       Reg_host_ctrl hc(this);
       if (   timing == Mmc::Mmc_hs400
@@ -974,6 +983,7 @@ Sdhci::set_clock(l4_uint32_t freq)
   switch (_type)
     {
     case Type::Iproc:
+    case Type::Bcm2711:
       {
         if (Reg_cap2_sdhci(this).clock_mult() != 0)
           warn.printf("Reg_cap2_sdhci.clock_mult != 0!");
@@ -1101,7 +1111,7 @@ Sdhci::set_voltage(Mmc::Voltage voltage)
         vs.write(this);
         break;
       }
-    case Type::Iproc:
+    case Type::Bcm2711:
       {
         l4_uint32_t gpio_set_value;
         if (voltage == Mmc::Voltage_330)
@@ -1110,8 +1120,11 @@ Sdhci::set_voltage(Mmc::Voltage voltage)
           gpio_set_value = 1;
         bcm2835_soc->set_fw_gpio(Bcm2835_soc::Raspi_exp_gpio_vdd_sd_io_sel,
                                  gpio_set_value);
-
         delay(10);
+      }
+      [[fallthrough]];
+    case Type::Iproc:
+      {
         Reg_host_ctrl2 hc2(this);
         if (voltage == Mmc::Voltage_330)
           hc2.v18() = 0;
@@ -1201,6 +1214,7 @@ Sdhci::supported_voltage() const
   switch (_type)
     {
     case Type::Iproc:
+    case Type::Bcm2711:
       {
         Reg_cap1_sdhci cap1(this);
         if (cap1.vs33())
@@ -1230,6 +1244,7 @@ Sdhci::xpc_supported(Mmc::Voltage voltage) const
   switch (_type)
     {
     case Type::Iproc:
+    case Type::Bcm2711:
       {
         // For XPC the controller supports up to 540mW at the desired voltage.
         Reg_max_current mc(this);

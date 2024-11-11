@@ -39,14 +39,20 @@ public:
   {
     Sdhci, ///< Sdhci driver
     Usdhc, ///< Sdhci driver with uSDHC modifications (NXP eSDHC i.MX)
-    Iproc, ///< Sdhci driver with iproc/arasan modifications (e.g. bcm2711)
+    Iproc, ///< Sdhci driver with iproc/arasan modifications
+    Bcm2711, /// Like iproc/arasan with bcm2711-specific more modifications
   };
 
   static bool auto_cmd12()
   { return Auto_cmd12; }
 
   bool auto_cmd23() const
-  { return (_type == Type::Usdhc || _type == Type::Iproc) && Auto_cmd23; }
+  {
+    return Auto_cmd23
+           && (   _type == Type::Usdhc
+               || _type == Type::Iproc
+               || _type == Type::Bcm2711);
+  }
 
   bool dma_adma2() const
   { return Dma_adma2; }
@@ -1131,10 +1137,11 @@ private:
   {
     switch (t)
       {
-      case Type::Sdhci: return "SDHCI";
-      case Type::Usdhc: return "uSDHC";
-      case Type::Iproc: return "IProc";
-      default:          return "<unknown type>";
+      case Type::Sdhci:   return "SDHCI";
+      case Type::Usdhc:   return "uSDHC";
+      case Type::Iproc:   return "IProc";
+      case Type::Bcm2711: return "Bcm2711";
+      default:            return "<unknown type>";
       }
   }
 
@@ -1150,6 +1157,9 @@ public:
 
   /** Initialize controller registers. */
   void init();
+
+  /** Bcm2711-specific initialization. */
+  void init_bcm2711(L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma);
 
   /** IRQ handler. */
   Cmd *handle_irq();
@@ -1221,6 +1231,7 @@ public:
     switch (_type)
       {
       case Type::Iproc:
+      case Type::Bcm2711:
         return !Reg_pres_state(this).dat0lsl();
       default:
         return !Reg_pres_state(this).d0lsl();

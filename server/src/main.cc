@@ -615,7 +615,7 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
           drv.add_disk(cxx::make_ref_obj<Emmc::Device<Emmc::Sdhci>>(
                          device_nr++, mmio_addr, iocap, mmio_space, irq_num,
                          irq_mode, icu, dma, server.registry(),
-                         Emmc::Sdhci::Type::Iproc, host_clock, max_seg,
+                         Emmc::Sdhci::Type::Bcm2711, host_clock, max_seg,
                          device_type_disable),
                        device_scan_finished);
           break;
