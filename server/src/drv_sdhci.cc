@@ -190,39 +190,63 @@ void
 Sdhci::init_bcm2711(L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma)
 {
   bcm2835_soc = new Bcm2835_soc(dma);
-  l4_uint32_t board_rev = bcm2835_soc->get_board_rev();
-  // See https://github.com/raspberrypi/linux/commit/
-  //     3d2cbb64483691c8f8cf88e17d7d581d9402ac4b
-  // ``emmc2 has different DMA constraints based on SoC revisions...
-  // The firmware will find whether the emmc2bus alias is defined, and if so,
-  // it'll edit the dma-ranges property below accordingly.´´
-  //
-  // Well, that's not possible here.
-  // See https://github.com/raspberrypi/documentation/blob/develop/
-  //     documentation/asciidoc/computers/raspberry-pi/revision-codes.adoc
-  switch ((board_rev & 0xf0'0000) >> 20)
+
+  /* See https://github.com/raspberrypi/linux/commit/
+   *     3d2cbb64483691c8f8cf88e17d7d581d9402ac4b
+   * ``emmc2 has different DMA constraints based on SoC revisions...
+   * The firmware will find whether the emmc2bus alias is defined, and if so,
+   * it'll edit the dma-ranges property below accordingly.´´
+   *
+   * Well, that's not possible here.
+   * See https://github.com/raspberrypi/documentation/blob/develop/
+   *     documentation/asciidoc/computers/raspberry-pi/revision-codes.adoc
+   *
+   * Older boards:
+   *  - The EMMC2 bus can only directly address the first 1GB.
+   *    XXX Is that true?
+   *  - The PCIe interface can only directly address the first 3GB.
+   *  - Device tree for emmc2bus:
+   *      #address-cells = <0x02>;
+   *      #size-cells = <0x01>;
+   *      emmc2bus: dma-ranges = <0x00 0xc0000000 0x00 0x00 0x40000000>;
+   *
+   * Newer boards:
+   *  - Device tree for emmc2bus:
+   *      #address-cells = <0x02>;
+   *      #size-cells = <0x01>;
+   *      emmc2bus: dma-ranges = <0x0 0x0 0x0 0x0 0xfc000000>;
+   */
+  Bcm2835_soc_rev board_rev{bcm2835_soc->get_board_rev()};
+  _dma_offset = 0xc0000000; // default: old
+  if (board_rev.new_style())
     {
-    case 0xc:
-    case 0xd:
-    case 0xe:
-    case 0xf:
-      /*
-       * #address-cells = <0x02>;
-       * #size-cells = <0x01>;
-       * emmc2bus: dma-ranges = <0x0 0x0 0x0 0x0 0xfc000000>;
-       */
-      break;
-    default:
-      /*
-       * #address-cells = <0x02>;
-       * #size-cells = <0x01>;
-       * emmc2bus: dma-ranges = <0x00 0xc0000000 0x00 0x00 0x40000000>;
-       */
-      _dma_offset = 0xc0000000;
-      break;
+      // Try to detect the C0 stepping
+      switch (board_rev.type())
+        {
+        case 0x11: // 4B
+          if (board_rev.revision() > 2)
+            _dma_offset = 0; // new
+          break;
+        case 0x13: // 400
+          _dma_offset = 0; // new
+          break;
+        }
     }
-  printf("Revision: %08x => \033[31;1mDMA offset = %08lx\033[m.\n",
-         board_rev, _dma_offset);
+
+  l4_uint64_t memsize;
+  switch (board_rev.memory_size())
+    {
+    case 0: memsize = 256 << 20; break;
+    case 1: memsize = 512 << 20; break;
+    case 2: memsize = 1ULL << 30; break;
+    case 3: memsize = 2ULL << 30; break;
+    case 4: memsize = 4ULL << 30; break;
+    case 5: memsize = 8ULL << 30; break;
+    default: memsize = 0; break;
+    }
+  printf("RAM: %s, Revision: %08x => \033[31;1mDMA offset = %08lx\033[m.\n",
+         memsize ? Util::readable_size(memsize).c_str() : "unknown",
+         board_rev.raw, _dma_offset);
 }
 
 Cmd *

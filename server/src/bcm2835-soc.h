@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include <l4/cxx/bitfield>
 #include "bcm2835-mbox.h"
 
 class Bcm2835_soc
@@ -44,4 +45,35 @@ public:
 
 private:
   Bcm2835_mbox mbox;
+};
+
+/**
+ * bcm2835 SoC revision number decoding.
+ *
+ * See  See https://github.com/raspberrypi/documentation/blob/develop/
+ *      documentation/asciidoc/computers/raspberry-pi/revision-codes.adoc
+ */
+struct Bcm2835_soc_rev
+{
+  l4_uint32_t raw;
+  /** Overvoltage allowed. */
+  CXX_BITFIELD_MEMBER(31, 31, overvoltage, raw);
+  /** OTP programming allowed. */
+  CXX_BITFIELD_MEMBER(30, 30, otp_program, raw);
+  /** OTP reading allowed. */
+  CXX_BITFIELD_MEMBER(29, 29, otp_read, raw);
+  /** Warranty has been voided by overclocking. */
+  CXX_BITFIELD_MEMBER(25, 25, warranty, raw);
+  /** New-style revision. */
+  CXX_BITFIELD_MEMBER(23, 23, new_style, raw);
+  /** Memory size. 0=256MB, 1=512MB, 2=1GB, 3=2GB, 4=4GB, 8=8GB. */
+  CXX_BITFIELD_MEMBER(20, 22, memory_size, raw);
+  /** Manufacturer: 0=Sony UK, 1=Egoman, 2=Embest, 3=Sony Japan, ... */
+  CXX_BITFIELD_MEMBER(16, 19, manufacturer, raw);
+  /** Processor: 0=BCM2835, 1=BCM2836, 2=BCM2837, 3=BCM2711, 4=BCM2712 */
+  CXX_BITFIELD_MEMBER(12, 15, processor, raw);
+  /** Type. */
+  CXX_BITFIELD_MEMBER(4, 11, type, raw);
+  /** Revision. */
+  CXX_BITFIELD_MEMBER(0, 3, revision, raw);
 };
