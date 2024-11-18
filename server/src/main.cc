@@ -598,42 +598,25 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
         {
         case Dev_qemu_sdhci:
         case Dev_usdhc:
+        case Dev_bcm2711:
           {
             using Type = Emmc::Sdhci::Type;
-            Type const type = (dev_type == Dev_usdhc)
+            Type const type = dev_type == Dev_usdhc
                                 ? Type::Usdhc
-                                : Type::Sdhci;
+                                : dev_type == Dev_bcm2711
+                                    ? Type::Bcm2711
+                                    : Type::Sdhci;
             drv.add_disk(cxx::make_ref_obj<Emmc::Device<Emmc::Sdhci>>(
                            device_nr++, mmio_addr, iocap, mmio_space, irq_num,
                            irq_mode, icu, dma, server.registry(),
                            type, host_clock, max_seg, device_type_disable),
                          device_scan_finished);
+            break;
           }
-          break;
-
-        case Dev_bcm2711:
-          drv.add_disk(cxx::make_ref_obj<Emmc::Device<Emmc::Sdhci>>(
-                         device_nr++, mmio_addr, iocap, mmio_space, irq_num,
-                         irq_mode, icu, dma, server.registry(),
-                         Emmc::Sdhci::Type::Bcm2711, host_clock, max_seg,
-                         device_type_disable),
-                       device_scan_finished);
-          break;
 
         case Dev_sdhi_emu:
           mmio_space = L4::cap_dynamic_cast<L4Re::Mmio_space>(iocap);
-          if (!cpg)
-            cpg = new Rcar3_cpg(bus);
-          cpg->enable_clock(3, 12);
-          cpg->enable_register(Rcar3_cpg::Sd2ckcr, 0x201);
-          drv.add_disk(cxx::make_ref_obj<Emmc::Device<Emmc::Sdhi>>(
-                         device_nr++, mmio_addr, iocap, mmio_space, irq_num,
-                         irq_mode, icu, dma, server.registry(),
-                         Emmc::Sdhi::Type::Sdhi, host_clock, max_seg,
-                         device_type_disable),
-                       device_scan_finished);
-          break;
-
+          [[fallthrough]];
         case Dev_sdhi_rcar3:
           if (!cpg)
             cpg = new Rcar3_cpg(bus);
