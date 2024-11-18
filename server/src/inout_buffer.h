@@ -11,12 +11,12 @@
 #include <l4/re/env>
 #include <l4/re/error_helper>
 #include <l4/re/util/shared_cap>
+#include <l4/re/util/unique_cap>
 #include <l4/cxx/ref_ptr>
 
 #include <stdio.h>
 #include <cassert>
-
-#include <l4/libblock-device/device.h>
+#include <cstring>
 
 class Inout_buffer : public cxx::Ref_obj
 {
@@ -42,18 +42,15 @@ public:
         printf("Capability '%s' not found -- allocating buffer.\n", cap_name);
       }
 
-    auto lcap = L4Re::chkcap(L4Re::Util::make_unique_cap<L4Re::Dataspace>(),
-                             "Allocate dataspace capability for IO memory.");
+    _ds = L4Re::chkcap(L4Re::Util::make_unique_cap<L4Re::Dataspace>(),
+                       "Allocate dataspace capability for IO memory.");
 
-    L4Re::chksys(e->mem_alloc()->alloc(size, lcap.get(),
+    L4Re::chksys(e->mem_alloc()->alloc(size, _ds.get(),
                                        L4Re::Mem_alloc::Continuous
                                        | L4Re::Mem_alloc::Pinned),
                  "Allocate pinned memory.");
 
-    attach_and_dma_map(size, dir, lcap.get(), flags);
-
-    _mem_region =
-      cxx::make_unique<Block_device::Mem_region>(0, size, 0, cxx::move(lcap));
+    attach_and_dma_map(size, dir, _ds.get(), flags);
   }
 
   Inout_buffer(Inout_buffer const &) = delete;
@@ -133,8 +130,8 @@ public:
 
 private:
   l4_size_t _size;
+  L4Re::Util::Unique_cap<L4Re::Dataspace> _ds;
   L4Re::Util::Shared_cap<L4Re::Dma_space> _dma;
-  cxx::unique_ptr<Block_device::Mem_region> _mem_region;
   L4Re::Rm::Unique_region<char *> _region;
   L4Re::Dma_space::Dma_addr _paddr;
   L4Re::Dma_space::Direction _dir;
