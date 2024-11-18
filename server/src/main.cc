@@ -441,6 +441,70 @@ create_dma_space(L4::Cap<L4vbus::Vbus> bus, long unsigned id)
 }
 
 static void
+pci_device(L4vbus::Pci_dev const &dev, l4_addr_t &mmio_addr, int &irq_num,
+           L4_irq_mode &irq_mode)
+{
+  l4_uint32_t addr;
+  L4Re::chksys(dev.cfg_read(0x10, &addr, 32), "Read PCI cfg BAR0.");
+  mmio_addr = addr;
+
+  l4_uint32_t cmd;
+  L4Re::chksys(dev.cfg_read(0x04, &cmd, 16), "Read PCI cfg command.");
+  if (!(cmd & 4))
+    {
+      trace.printf("Enable PCI bus master.\n");
+      cmd |= 4;
+      L4Re::chksys(dev.cfg_write(0x04, cmd, 16), "Write PCI cfg command.");
+    }
+
+  unsigned char polarity;
+  unsigned char trigger;
+  irq_num = L4Re::chksys(dev.irq_enable(&trigger, &polarity),
+                         "Enable interrupt.");
+
+  if (trigger == 0)
+    irq_mode = L4_IRQ_F_LEVEL_HIGH;
+}
+
+static bool
+no_pci_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
+             l4_addr_t &mmio_addr, int &irq_num, L4_irq_mode &irq_mode)
+{
+  for (unsigned i = 0;
+       i < dev_info.num_resources && (!mmio_addr || !irq_num); ++i)
+    {
+      l4vbus_resource_t res;
+      L4Re::chksys(dev.get_resource(i, &res));
+      if (res.type == L4VBUS_RESOURCE_MEM)
+        {
+          if (!mmio_addr)
+            mmio_addr = res.start;
+        }
+      else if (res.type == L4VBUS_RESOURCE_IRQ)
+        {
+          if (!irq_num)
+            irq_num = res.start;
+
+          irq_mode = L4_irq_mode(res.flags);
+        }
+    }
+
+  if (!mmio_addr)
+    {
+      info.printf("Device '%s' has no MMIO resource.\n", dev_info.name);
+      return false;
+    }
+
+  if (!irq_num)
+    {
+      info.printf("Device '%s' has no IRQ resource.\n", dev_info.name);
+      return false;
+    }
+
+  return true;
+}
+
+static void
 scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
             L4::Cap<L4vbus::Vbus> bus, L4::Cap<L4::Icu> icu)
 {
@@ -479,27 +543,7 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
       if (class_code != 0x80501)
         return;
 
-      l4_uint32_t addr;
-      L4Re::chksys(dev.cfg_read(0x10, &addr, 32), "Read PCI cfg BAR0.");
-      mmio_addr = addr;
-
-      l4_uint32_t cmd;
-      L4Re::chksys(dev.cfg_read(0x04, &cmd, 16), "Read PCI cfg command.");
-      if (!(cmd & 4))
-        {
-          trace.printf("Enable PCI bus master.\n");
-          cmd |= 4;
-          L4Re::chksys(dev.cfg_write(0x04, cmd, 16), "Write PCI cfg command.");
-        }
-
-      unsigned char polarity;
-      unsigned char trigger;
-      irq_num = L4Re::chksys(dev.irq_enable(&trigger, &polarity),
-                             "Enable interrupt.");
-
-      if (trigger == 0)
-        irq_mode = L4_IRQ_F_LEVEL_HIGH;
-
+      pci_device(dev, mmio_addr, irq_num, irq_mode);
       dev_type = Dev_qemu_sdhci;
     }
   else
@@ -517,36 +561,8 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
       else
         return; // no match
 
-      for (unsigned i = 0;
-           i < dev_info.num_resources && (!mmio_addr || !irq_num); ++i)
-        {
-          l4vbus_resource_t res;
-          L4Re::chksys(dev.get_resource(i, &res));
-          if (res.type == L4VBUS_RESOURCE_MEM)
-            {
-              if (!mmio_addr)
-                mmio_addr = res.start;
-            }
-          else if (res.type == L4VBUS_RESOURCE_IRQ)
-            {
-              if (!irq_num)
-                irq_num = res.start;
-
-              irq_mode = L4_irq_mode(res.flags);
-            }
-        }
-
-      if (!mmio_addr)
-        {
-          info.printf("Device '%s' has no MMIO resource.\n", dev_info.name);
-          return;
-        }
-
-      if (!irq_num)
-        {
-          info.printf("Device '%s' has no IRQ resource.\n", dev_info.name);
-          return;
-        }
+      if (!no_pci_device(dev, dev_info, mmio_addr, irq_num, irq_mode))
+        return; // matched device resource problem
     }
 
   unsigned long id = -1UL;
