@@ -22,12 +22,13 @@ class Mmio_space_register_block_base
 {
 protected:
   L4::Cap<L4Re::Mmio_space> _mmio_space;
-  l4_addr_t _phys;
+  l4_uint64_t _phys;
   l4_addr_t _shift;
 
 public:
   explicit Mmio_space_register_block_base(L4::Cap<L4Re::Mmio_space> mmio_space,
-                                          l4_addr_t phys = 0, l4_addr_t shift = 0)
+                                          l4_uint64_t phys, l4_uint64_t,
+                                          l4_addr_t shift = 0)
   : _mmio_space(mmio_space), _phys(phys), _shift(shift) {}
 
   template< typename T >
@@ -38,7 +39,7 @@ public:
   void write(T value, l4_addr_t reg) const
   { do_write(value, _phys + (reg << _shift), log2_size((T)0)); }
 
-  void set_phys(l4_addr_t phys) { _phys = phys; }
+  void set_phys(l4_uint64_t phys) { _phys = phys; }
   void set_shift(l4_addr_t shift) { _shift = shift; }
 
 private:
@@ -57,8 +58,9 @@ struct Mmio_space_register_block
   Mmio_space_register_block_base
 {
   explicit Mmio_space_register_block(L4::Cap<L4Re::Mmio_space> cap,
-                                     l4_addr_t base = 0, l4_addr_t shift = 0)
-  : Mmio_space_register_block_base(cap, base, shift) {}
+                                     l4_uint64_t base, l4_uint64_t size,
+                                     l4_addr_t shift = 0)
+  : Mmio_space_register_block_base(cap, base, size, shift) {}
 };
 
 template< unsigned MAX_BITS = 32 >
@@ -66,8 +68,9 @@ struct Mmio_map_register_block
 : L4drivers::Mmio_register_block<MAX_BITS>
 {
   explicit Mmio_map_register_block(L4::Cap<L4Re::Dataspace> iocap,
-                                   l4_addr_t base = 0, l4_addr_t shift = 0)
-  : iomem(base, iocap)
+                                   l4_uint64_t base, l4_uint64_t size,
+                                   l4_addr_t shift = 0)
+  : iomem(base, size, iocap)
   {
     this->set_base(iomem.vaddr.get() + iomem.offset);
     this->set_shift(shift);

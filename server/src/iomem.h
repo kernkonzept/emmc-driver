@@ -18,17 +18,17 @@ struct Iomem
 {
   L4Re::Rm::Unique_region<l4_addr_t> vaddr;
 
-  Iomem(l4_addr_t phys_addr, L4::Cap<L4Re::Dataspace> iocap)
+  Iomem(l4_uint64_t phys_addr, l4_uint64_t size, L4::Cap<L4Re::Dataspace> iocap)
   : offset(phys_addr & ~L4_PAGEMASK)
   {
     auto *e = L4Re::Env::env();
-    L4Re::chksys(e->rm()->attach(&vaddr, 4096,
+    L4Re::chksys(e->rm()->attach(&vaddr, size,
                                  L4Re::Rm::F::Search_addr
                                  | L4Re::Rm::F::Cache_uncached
-                                 | L4Re::Rm::F::RW,
+                                 | L4Re::Rm::F::RW
+                                 | L4Re::Rm::F::Eager_map,
                                  L4::Ipc::make_cap_rw(iocap),
-                                 phys_addr - offset,
-                                 L4_PAGESHIFT),
+                                 phys_addr, L4_PAGESHIFT),
                  "Attach in/out buffer.");
   }
 

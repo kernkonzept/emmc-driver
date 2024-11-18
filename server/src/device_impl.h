@@ -37,7 +37,7 @@ Device<Driver>::readable_product(std::string const s)
 }
 
 template <class Driver>
-Device<Driver>::Device(int nr, l4_addr_t mmio_addr,
+Device<Driver>::Device(int nr, l4_uint64_t mmio_addr, l4_uint64_t mmio_size,
                        L4::Cap<L4Re::Dataspace> iocap,
                        L4::Cap<L4Re::Mmio_space> mmio_space,
                        int irq_num, L4_irq_mode irq_mode, L4::Cap<L4::Icu> icu,
@@ -46,7 +46,7 @@ Device<Driver>::Device(int nr, l4_addr_t mmio_addr,
                        typename Driver::Type type,
                        l4_uint32_t host_clock, int max_seg,
                        Mmc::Reg_ecsd::Ec196_device_type dt_disable)
-: _drv(nr, iocap, mmio_space, mmio_addr, type, dma, host_clock,
+: _drv(nr, iocap, mmio_space, mmio_addr, mmio_size, type, dma, host_clock,
        [this](bool is_data) { receive_irq(is_data); }),
   _irq_num(irq_num),
   _irq_mode(irq_mode),

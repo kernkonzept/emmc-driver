@@ -35,7 +35,7 @@ public:
   explicit Sdhi(int nr,
                 L4::Cap<L4Re::Dataspace> iocap,
                 L4::Cap<L4Re::Mmio_space> mmio_space,
-                l4_addr_t mmio_base, Type,
+                l4_uint64_t mmio_base, l4_uint64_t mmio_size, Type,
                 L4Re::Util::Shared_cap<L4Re::Dma_space> const &,
                 l4_uint32_t, Receive_irq receive_irq);
 

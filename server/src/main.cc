@@ -441,12 +441,21 @@ create_dma_space(L4::Cap<L4vbus::Vbus> bus, long unsigned id)
 }
 
 static void
-pci_device(L4vbus::Pci_dev const &dev, l4_addr_t &mmio_addr, int &irq_num,
-           L4_irq_mode &irq_mode)
+pci_device(L4vbus::Pci_dev const &dev, l4_uint64_t &mmio_addr,
+           l4_uint64_t &mmio_size, int &irq_num, L4_irq_mode &irq_mode)
 {
   l4_uint32_t addr;
-  L4Re::chksys(dev.cfg_read(0x10, &addr, 32), "Read PCI cfg BAR0.");
-  mmio_addr = addr;
+  l4_uint32_t size;
+  L4Re::chksys(dev.cfg_read(0x10, &addr, 32), "Read PCI cfg BAR0 (addr).");
+  mmio_addr = addr & ~0xfU;
+  L4Re::chksys(dev.cfg_write(0x10, ~0U, 32), "Write PCI cfg BAR0.");
+  L4Re::chksys(dev.cfg_read(0x10, &size, 32), "Read PCI cfg BAR0 (size).");
+  L4Re::chksys(dev.cfg_write(0x10, addr, 32), "Write PCI cfg BAR0 (restore.");
+  if (size & 1)
+    L4Re::throw_error(-L4_EINVAL, "First PCI BAR maps into memory");
+  if ((size & 6) != 0)
+    L4Re::throw_error(-L4_EINVAL, "First PCI BAR is 32-bits wide");
+  mmio_size = -(size & ~0xfU);
 
   l4_uint32_t cmd;
   L4Re::chksys(dev.cfg_read(0x04, &cmd, 16), "Read PCI cfg command.");
@@ -464,11 +473,14 @@ pci_device(L4vbus::Pci_dev const &dev, l4_addr_t &mmio_addr, int &irq_num,
 
   if (trigger == 0)
     irq_mode = L4_IRQ_F_LEVEL_HIGH;
+  else
+    irq_mode = L4_IRQ_F_EDGE;
 }
 
 static bool
-no_pci_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
-             l4_addr_t &mmio_addr, int &irq_num, L4_irq_mode &irq_mode)
+nopci_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
+             l4_uint64_t &mmio_addr, l4_uint64_t &mmio_size, int &irq_num,
+             L4_irq_mode &irq_mode)
 {
   for (unsigned i = 0;
        i < dev_info.num_resources && (!mmio_addr || !irq_num); ++i)
@@ -478,14 +490,18 @@ no_pci_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
       if (res.type == L4VBUS_RESOURCE_MEM)
         {
           if (!mmio_addr)
-            mmio_addr = res.start;
+            {
+              mmio_addr = res.start;
+              mmio_size = res.end - res.start + 1;
+            }
         }
       else if (res.type == L4VBUS_RESOURCE_IRQ)
         {
           if (!irq_num)
-            irq_num = res.start;
-
-          irq_mode = L4_irq_mode(res.flags);
+            {
+              irq_num = res.start;
+              irq_mode = L4_irq_mode(res.flags);
+            }
         }
     }
 
@@ -508,7 +524,8 @@ static void
 scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
             L4::Cap<L4vbus::Vbus> bus, L4::Cap<L4::Icu> icu)
 {
-  l4_addr_t mmio_addr = 0;
+  l4_uint64_t mmio_addr = 0;
+  l4_uint64_t mmio_size = 0;
   int irq_num = 0;
   L4_irq_mode irq_mode = L4_IRQ_F_LEVEL_HIGH;
 
@@ -543,7 +560,7 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
       if (class_code != 0x80501)
         return;
 
-      pci_device(dev, mmio_addr, irq_num, irq_mode);
+      pci_device(dev, mmio_addr, mmio_size, irq_num, irq_mode);
       dev_type = Dev_qemu_sdhci;
     }
   else
@@ -561,7 +578,7 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
       else
         return; // no match
 
-      if (!no_pci_device(dev, dev_info, mmio_addr, irq_num, irq_mode))
+      if (!nopci_device(dev, dev_info, mmio_addr, mmio_size, irq_num, irq_mode))
         return; // matched device resource problem
     }
 
@@ -581,7 +598,7 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
   if (id == -1UL)
     Dbg::trace().printf("Using VBUS global DMA domain.\n");
 
-  info.printf("Device @ %08lx: %sinterrupt: %d, %s-triggered.\n",
+  info.printf("Device @ %08llx: %sinterrupt: %d, %s-triggered.\n",
               mmio_addr, dev_type == Dev_qemu_sdhci ? "PCI " : "", irq_num,
               irq_mode == L4_IRQ_F_LEVEL_HIGH ? "level-high" : "edge");
 
@@ -623,8 +640,8 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
                                     ? Type::Bcm2711
                                     : Type::Sdhci;
             drv.add_disk(cxx::make_ref_obj<Emmc::Device<Emmc::Sdhci>>(
-                           device_nr++, mmio_addr, iocap, mmio_space, irq_num,
-                           irq_mode, icu, dma, server.registry(),
+                           device_nr++, mmio_addr, mmio_size, iocap, mmio_space,
+                           irq_num, irq_mode, icu, dma, server.registry(),
                            type, host_clock, max_seg, device_type_disable),
                          device_scan_finished);
             break;
@@ -639,8 +656,8 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
           cpg->enable_clock(3, 12);
           cpg->enable_register(Rcar3_cpg::Sd2ckcr, 0x201);
           drv.add_disk(cxx::make_ref_obj<Emmc::Device<Emmc::Sdhi>>(
-                         device_nr++, mmio_addr, iocap, mmio_space, irq_num,
-                         irq_mode, icu, dma, server.registry(),
+                         device_nr++, mmio_addr, mmio_size, iocap, mmio_space,
+                         irq_num, irq_mode, icu, dma, server.registry(),
                          Emmc::Sdhi::Type::Sdhi, host_clock, max_seg,
                          device_type_disable),
                        device_scan_finished);

@@ -114,7 +114,7 @@ public:
     T_mmc,
   };
 
-  Device(int nr, l4_addr_t mmio_addr,
+  Device(int nr, l4_uint64_t mmio_addr, l4_uint64_t mmio_size,
          L4::Cap<L4Re::Dataspace> iocap,
          L4::Cap<L4Re::Mmio_space> mmio_space,
          int irq_num, L4_irq_mode irq_mode, L4::Cap<L4::Icu> icu,

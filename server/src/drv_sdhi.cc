@@ -22,15 +22,15 @@ namespace Emmc {
 Sdhi::Sdhi(int nr,
            L4::Cap<L4Re::Dataspace> iocap,
            L4::Cap<L4Re::Mmio_space> mmio_space,
-           l4_addr_t mmio_base, Sdhi::Type,
+           l4_uint64_t mmio_base, l4_uint64_t mmio_size, Sdhi::Type,
            L4Re::Util::Shared_cap<L4Re::Dma_space> const &,
            l4_uint32_t, Receive_irq receive_irq)
-: Drv(iocap, mmio_space, mmio_base, receive_irq),
+: Drv(iocap, mmio_space, mmio_base, mmio_size, receive_irq),
   warn(Dbg::Warn, "sdhi", nr),
   info(Dbg::Info, "sdhi", nr),
   trace(Dbg::Trace, "sdhi", nr)
 {
-  trace.printf("Assuming SDHI eMMC controller (VERSION=%08x), registers at %08lx.\n",
+  trace.printf("Assuming SDHI eMMC controller (VERSION=%08x), registers at %08llx.\n",
                Reg_version(_regs).raw, mmio_base);
 }
 

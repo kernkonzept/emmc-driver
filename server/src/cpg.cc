@@ -33,19 +33,21 @@ Rcar3_cpg::Rcar3_cpg(L4::Cap<L4vbus::Vbus> vbus)
           for (unsigned i = 0; i < di.num_resources; ++i)
             {
               l4vbus_resource_t res;
-              L4Re::chksys(dev.get_resource(i, &res));
+              L4Re::chksys(dev.get_resource(i, &res), "Get device resource");
               if (res.type == L4VBUS_RESOURCE_MEM)
                 {
+                  l4_uint64_t addr = res.start;
+                  l4_uint64_t size = res.end - res.start + 1;
                   if (dev.is_compatible("renesas,r8a7796-cpg-mssr") == 1)
                     {
                       L4::Cap<L4Re::Mmio_space> mmio_space(dev.bus_cap().cap());
-                      _regs = new Hw::Mmio_space_register_block<32>(mmio_space,
-                                                                    res.start);
+                      _regs = new Hw::Mmio_space_register_block<32>(
+                                mmio_space, addr, size);
                     }
                   else
                     {
-                      _regs = new Hw::Mmio_map_register_block<32>(dev.bus_cap(),
-                                                                  res.start);
+                      _regs = new Hw::Mmio_map_register_block<32>(
+                                dev.bus_cap(), addr, size);
                     }
                   return;
                 }

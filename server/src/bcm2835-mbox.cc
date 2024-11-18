@@ -82,7 +82,9 @@ Bcm2835_mbox::Bcm2835_mbox(L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma)
       L4Re::chksys(mbox.get_resource(i, &res), "Get mbox device info.");
       if (res.type == L4VBUS_RESOURCE_MEM)
         {
-          _regs = new Hw::Mmio_map_register_block<32>(mbox.bus_cap(), res.start);
+          l4_uint64_t addr = res.start;
+          l4_uint64_t size = res.end - res.start + 1;
+          _regs = new Hw::Mmio_map_register_block<32>(mbox.bus_cap(), addr, size);
           _data_virt = _data.get<void *>();
           _data_phys = _data.pget(); // no DMA offset!
           return;

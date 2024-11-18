@@ -1149,7 +1149,7 @@ public:
   explicit Sdhci(int nr,
                  L4::Cap<L4Re::Dataspace> iocap,
                  L4::Cap<L4Re::Mmio_space> mmio_space,
-                 l4_addr_t mmio_base, Type type,
+                 l4_uint64_t mmio_base, l4_uint64_t mmio_size, Type type,
                  L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
                  l4_uint32_t host_clock, Receive_irq receive_irq);
 
