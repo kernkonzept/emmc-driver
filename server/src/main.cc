@@ -127,13 +127,14 @@ public:
             return -L4_EINVAL;
           }
 
-        if (parse_string_param(p, "device=", &device))
+        std::string device_param;
+        if (parse_string_param(p, "device=", &device_param))
           {
-            std::transform(device.begin(), device.end(), device.begin(),
-                           [](unsigned char c){ return std::toupper(c); });
-            continue;
+            long ret = parse_device_name(device_param, device);
+            if (ret < 0)
+              return ret;
           }
-        if (parse_int_param(p, "ds-max=", &num_ds))
+        else if (parse_int_param(p, "ds-max=", &num_ds))
           {
             if (num_ds <= 0 || num_ds > 256) // sanity check with arbitrary limit
               {
@@ -141,17 +142,16 @@ public:
                             "Number must be between 1 and 256.\n");
                 return -L4_EINVAL;
               }
-            continue;
           }
-        if (strncmp(p.value<char const *>(), "readonly", p.length()) == 0)
+        else if (strncmp(p.value<char const *>(), "readonly", p.length()) == 0)
           readonly = true;
-        if (strncmp(p.value<char const *>(), "dma-map-all", p.length()) == 0)
+        else if (strncmp(p.value<char const *>(), "dma-map-all", p.length()) == 0)
           dma_map_all = true;
       }
 
     if (device.empty())
       {
-        warn.printf("Parameter 'device=' not found. Device UUID is required.\n");
+        warn.printf("Parameter 'device=' not specified. Device label or UUID required.\n");
         return -L4_EINVAL;
       }
 
@@ -239,7 +239,7 @@ struct Client_opts
   {
     if (capname)
       {
-        if (!device)
+        if (device.empty())
           {
             Err().printf("No device for client '%s' given. "
                          "Please specify a device.\n", capname);
@@ -254,15 +254,15 @@ struct Client_opts
           }
 
         // Copy parameters for lambda capture. The object itself is ephemeral!
-        const char *dev = device;
+        std::string dev = device;
         bool map_all = dma_map_all;
-        blk_mgr->add_static_client(cap, device, No_partno, ds_max, readonly,
+        blk_mgr->add_static_client(cap, dev.c_str(), No_partno, ds_max, readonly,
                                    [dev, map_all](Emmc::Base_device *b)
          {
            Dbg(Dbg::Warn).printf("%s for device '%s'\033[m\n",
                                  map_all ? "\033[31;1mDMA-map-all enabled"
                                          : "\033[32mDMA-map-all disabled",
-                                 dev);
+                                 dev.c_str());
            if (auto *pd = dynamic_cast<Emmc::Part_device *>(b))
              pd->set_dma_map_all(map_all);
            else
@@ -273,8 +273,8 @@ struct Client_opts
     return true;
   }
 
-  const char *capname = nullptr;
-  const char *device = nullptr;
+  char const *capname = nullptr;
+  std::string device;
   int ds_max = 2;
   bool readonly = false;
   bool dma_map_all = false;
@@ -382,7 +382,11 @@ parse_args(int argc, char *const *argv)
           opts.capname = optarg;
           break;
         case OPT_DEVICE:
-          opts.device = optarg;
+          if (Blk_mgr::parse_device_name(optarg, opts.device) < 0)
+            {
+              warn.printf("Invalid device name parameter\n");
+              return -1;
+            }
           break;
         case OPT_DS_MAX:
           opts.ds_max = atoi(optarg);
