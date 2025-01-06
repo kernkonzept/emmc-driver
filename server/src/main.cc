@@ -612,6 +612,7 @@ scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
     {
     case 0x30b40000: host_clock = 400000000; break;
     case 0x30b50000: host_clock = 200000000; break;
+    case 0x30b60000: host_clock = 200000000; break;
     case 0x5b010000: host_clock = 396000000; break;
     case 0x5b020000: host_clock = 198000000; break;
     case 0x5b030000: host_clock = 198000000; break;
