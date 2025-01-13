@@ -5,6 +5,14 @@
  * License: see LICENSE.spdx (in this directory or the directories above)
  */
 
+/**
+ * \file
+ * Driver base functionality.
+ *
+ * Most important the access to the MMIO registers and simple functions for
+ * simple command execution without interrupts (required during setup).
+ */
+
 #pragma once
 
 #include <functional>

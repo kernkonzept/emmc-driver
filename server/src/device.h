@@ -6,6 +6,15 @@
  * License: see LICENSE.spdx (in this directory or the directories above)
  */
 
+/**
+ * \file
+ * Device driver instance.
+ *
+ * So far, the driver is a template parameter for Device. This is convenient for
+ * developing and for performance but eventually this causes headaches so this
+ * might change in the future.
+ */
+
 #pragma once
 
 #include <string>

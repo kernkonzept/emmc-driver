@@ -5,6 +5,11 @@
  * License: see LICENSE.spdx (in this directory or the directories above)
  */
 
+/**
+ * \file
+ * Simple control for Clock Pulse Generator on RCar3.
+ */
+
 #pragma once
 
 #include <l4/drivers/hw_mmio_register_block>

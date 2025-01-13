@@ -6,6 +6,13 @@
  * License: see LICENSE.spdx (in this directory or the directories above)
  */
 
+/**
+ * \file
+ * eMMC command handling.
+ *
+ * Prerequisite for command queuing.
+ */
+
 #pragma once
 
 #include <string>

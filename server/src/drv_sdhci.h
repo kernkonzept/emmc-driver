@@ -5,6 +5,16 @@
  * License: see LICENSE.spdx (in this directory or the directories above)
  */
 
+/**
+ * \file
+ * Driver for SDHCI-like controllers.
+ *
+ * - SDHCI:
+ * ``SD Specifications Part A2: SD Host Controller, Simplified Specification´´
+ * - iproc/arasan:
+ *  ``BROADCOM BCM2835 ARM Peripherals / External Mass Media Controller´´
+ */
+
 #pragma once
 
 #include <string>
@@ -16,13 +26,6 @@
 #include "debug.h"
 #include "drv.h"
 #include "inout_buffer.h"
-
-/*
- * SDHCI:
- * ``SD Specifications Part A2: SD Host Controller, Simplified Specification´´
- * iproc/arasan:
- *  ``BROADCOM BCM2835 ARM Peripherals / External Mass Media Controller´´
- */
 
 class Bcm2835_mbox;
 

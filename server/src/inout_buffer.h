@@ -6,6 +6,12 @@
  *
  * License: see LICENSE.spdx (in this directory or the directories above)
  */
+
+/**
+ * \file
+ * Convenient class for DMA-able memory used for in/out operations.
+ */
+
 #pragma once
 
 #include <l4/re/env>

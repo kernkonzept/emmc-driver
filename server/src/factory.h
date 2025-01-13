@@ -5,6 +5,11 @@
  * License: see LICENSE.spdx (in this directory or the directories above)
  */
 
+/**
+ * \file
+ * Driver factory.
+ */
+
 #pragma once
 
 #include <l4/cxx/hlist>

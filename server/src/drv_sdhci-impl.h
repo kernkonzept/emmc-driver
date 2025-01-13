@@ -6,7 +6,8 @@
  */
 
 /**
- * \file backend for SDHCI used by i.MX8.
+ * \file
+ * Non-inline parts of driver for SDHCI-like controllers.
  */
 
 #include <l4/sys/cache.h>

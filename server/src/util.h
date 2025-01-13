@@ -5,6 +5,12 @@
  * License: see LICENSE.spdx (in this directory or the directories above)
  */
 
+/**
+ * \file
+ * Miscellaneous utility functions (fine-grained clock, logging convenience
+ * functions).
+ */
+
 #pragma once
 
 #include <string>

@@ -5,6 +5,11 @@
  * License: see LICENSE.spdx (in this directory or the directories above)
  */
 
+/**
+ * \file
+ * Driver for SDHI controllers found on RCar3 platforms.
+ */
+
 #pragma once
 
 #include "drv.h"
