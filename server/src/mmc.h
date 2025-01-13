@@ -1584,6 +1584,13 @@ public:
     CXX_BITFIELD_MEMBER(13, 13, pcie_12v_supp, raw);
   };
 
+  struct Arg_cmd19_send_tuning_block : public Arg
+  {
+    using Arg::Arg;
+    // SD Specification Part 1 (Physical Layer Simplified Specification) 4.2.4.5
+    enum { Max_loops = 40 };
+  };
+
   struct Arg_cmd21_send_tuning_block : public Arg
   {
     using Arg::Arg;

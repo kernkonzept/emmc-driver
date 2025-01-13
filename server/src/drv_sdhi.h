@@ -59,6 +59,10 @@ public:
   bool supp_uhs_timings(Mmc::Timing timing) const
   { (void)timing; return false; }
 
+  /** Return true if the selected timing needs tuning. */
+  bool needs_tuning_sdr50() const
+  { return false; }
+
   /** Return true if the power limit is supported by the controller. */
   bool supp_power_limit(Mmc::Power_limit power) const
   { (void)power; return false; }
@@ -66,6 +70,9 @@ public:
   /** Return true if tuning has finished. */
   bool tuning_finished(bool *success)
   { (void)success; return false; }
+
+  void reset_tuning() {}
+  void enable_auto_tuning() {}
 
   /** Return true if the card is busy. */
   bool card_busy() const
@@ -928,9 +935,6 @@ private:
 
   /** Handle interrupts related to the data phase. */
   void handle_irq_data(Cmd *cmd, Reg_sd_info sd_info);
-
-  void reset_tuning()
-  {}
 
   /** Disable clock when changing clock/timing. */
   void clock_disable();

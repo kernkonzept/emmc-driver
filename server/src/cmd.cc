@@ -105,7 +105,8 @@ std::string Cmd::cmd_to_str() const
     case 14: return "BUSTEST_R";
     case 15: return "GO_INACTIVE_STATE";
     case 18: return "READ_MULTIPLE_BLOCK";
-    case 19: return "BUSTEST_W";
+    case 19: return "SEND_TUNING_BLOCK"; // SD
+    case 21: return "SEND_TUNING_BLOCK_HS200"; // eMMC
     case 23: return "SET_BLOCK_COUNT";
     case 24: return "WRITE_BLOCK";
     case 25: return "WRITE_MULTIPLE_BLOCK";

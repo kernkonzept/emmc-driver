@@ -305,6 +305,7 @@ Sdhci<TYPE>::handle_irq_data(Cmd *cmd, Reg_int_status is)
     {
       is_ack.copy_data_error(is);
       cmd->status = Cmd::Data_error;
+      // For debugging: Be more verbose with specific specific error classes.
       if (is.admae())
         {
           printf("ADMA error: status=%08x, ADMA addr=%x'%08x, is=%08x\n",
@@ -317,6 +318,10 @@ Sdhci<TYPE>::handle_irq_data(Cmd *cmd, Reg_int_status is)
                      bs.blkcnt().get(), bs.blksize().get());
             }
           adma2_dump_descs();
+        }
+      else if (is.dce())
+        {
+          printf("CRC error. Tuning problem?\n");
         }
     }
   else if (is.tc())
@@ -624,10 +629,10 @@ Sdhci<TYPE>::cmd_submit(Cmd *cmd)
         case Sdhci_type::Iproc:
         case Sdhci_type::Bcm2711:
           {
-            Reg_autocmd12_err_status es(this);
-            es.smp_clk_sel() = 0;
-            es.execute_tuning() = 1;
-            es.write(this);
+            Reg_host_ctrl2 hc2(this);
+            hc2.tuned() = 0;
+            hc2.tuneon() = 1;
+            hc2.write(this);
             xt.dtdsel() = 1;
             break;
           }
@@ -1168,11 +1173,55 @@ Sdhci<TYPE>::reset_tuning()
     {
       if (Usdhc_std_tuning)
         {
+          Reg_mix_ctrl mc(this);
+          mc.auto_tune_en() = 0;
+          mc.write(this);
+
           Reg_autocmd12_err_status a12s(this);
           a12s.execute_tuning() = 0;
           a12s.smp_clk_sel() = 0;
           a12s.write(this);
+
+          Util::poll(50, [this]
+                     { return !Reg_autocmd12_err_status(this).execute_tuning(); },
+                     "Tuning disabled");
+
+          Reg_int_status is(this);
+          is.brr() = 1;
+          is.write(this);
         }
+    }
+}
+
+template <Sdhci_type TYPE>
+void
+Sdhci<TYPE>::enable_auto_tuning()
+{
+  if (TYPE == Sdhci_type::Usdhc)
+    {
+      Reg_vend_spec2 vs2(this);
+      switch (Reg_prot_ctrl(this).dtw())
+        {
+        case Reg_prot_ctrl::Width_8bit:
+          vs2.tuning_8bit_en() = 1;
+          vs2.tuning_1bit_en() = 0;
+          break;
+        case Reg_prot_ctrl::Width_4bit:
+          vs2.tuning_8bit_en() = 0;
+          vs2.tuning_1bit_en() = 0;
+          break;
+        case Reg_prot_ctrl::Width_1bit:
+        default:
+          vs2.tuning_8bit_en() = 0;
+          vs2.tuning_1bit_en() = 1;
+          break;
+        }
+      vs2.tuning_cmd_en() = 1;
+      vs2.write(this);
+
+      Reg_mix_ctrl mc(this);
+      mc.auto_tune_en() = 1;
+      mc.write(this);
     }
 }
 
@@ -1180,12 +1229,24 @@ template <Sdhci_type TYPE>
 bool
 Sdhci<TYPE>::tuning_finished(bool *success)
 {
-  Reg_autocmd12_err_status es(this);
-  if (es.execute_tuning())
-    return false;
+  if (TYPE == Sdhci_type::Usdhc)
+    {
+      Reg_autocmd12_err_status es(this);
+      if (es.execute_tuning())
+        return false;
 
-  *success = es.smp_clk_sel();
-  return true;
+      *success = es.smp_clk_sel();
+      return true;
+    }
+  else
+    {
+      Reg_host_ctrl2 hc2(this);
+      if (hc2.tuneon())
+        return false;
+
+      *success = hc2.tuned();
+      return true;
+    }
 }
 
 template <Sdhci_type TYPE>

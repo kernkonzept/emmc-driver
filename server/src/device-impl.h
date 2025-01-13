@@ -1167,10 +1167,10 @@ Device<Driver>::power_up_sd(Cmd *cmd)
     _io_buf.dump("Got switch function status:", 4, 64);
 
   Mmc::Reg_switch_func sf(_io_buf.get<l4_uint8_t>());
-  trace.printf("access: sdr12:%s, sdr25:%s, sdr50:%s, sdr104:%s, ddr50:%s\n",
-               yes_no(sf.acc_mode_sdr12()), yes_no(sf.acc_mode_sdr25()),
-               yes_no(sf.acc_mode_sdr50()), yes_no(sf.acc_mode_sdr104()),
-               yes_no(sf.acc_mode_ddr50()));
+  info.printf("access: sdr12:%s, sdr25:%s, sdr50:%s, sdr104:%s, ddr50:%s\n",
+              yes_no(sf.acc_mode_sdr12()), yes_no(sf.acc_mode_sdr25()),
+              yes_no(sf.acc_mode_sdr50()), yes_no(sf.acc_mode_sdr104()),
+              yes_no(sf.acc_mode_ddr50()));
 
   trace.printf("power limit: 0.72W:%s, 1.44W:%s, 2.16W:%s, 2.88W:%s, 1.80W:%s\n",
                yes_no(sf.power_limit_072w()), yes_no(sf.power_limit_144w()),
@@ -1198,99 +1198,142 @@ Device<Driver>::power_up_sd(Cmd *cmd)
       _drv.delay(5);
     }
 
-  if (v18 && _drv.supp_uhs_timings(Mmc::Uhs_sdr104) && sf.acc_mode_sdr104()
-      && !(_device_type_disable.sd & Mmc::Uhs_sdr104))
+  // Start with the fastest supported mode. On tuning failure, try the next
+  // slower supported mode by masking modes using _device_type_disable.
+  for (;;)
     {
-      mmc_timing = Mmc::Uhs_sdr104;
-      a6_timing = Mmc::Arg_cmd6_switch_func::Grp1_sdr104;
-      freq = 200 * MHz;
-    }
-  else if (v18 && _drv.supp_uhs_timings(Mmc::Uhs_ddr50) && sf.acc_mode_ddr50()
-           && !(_device_type_disable.sd & Mmc::Uhs_ddr50))
-    {
-      mmc_timing = Mmc::Uhs_ddr50;
-      a6_timing = Mmc::Arg_cmd6_switch_func::Grp1_ddr50;
-      freq = 50 * MHz;
-    }
-  else if (v18 && _drv.supp_uhs_timings(Mmc::Uhs_sdr50) && sf.acc_mode_sdr50()
-           && !(_device_type_disable.sd & Mmc::Uhs_sdr50))
-    {
-      mmc_timing = Mmc::Uhs_sdr50;
-      a6_timing = Mmc::Arg_cmd6_switch_func::Grp1_sdr50;
-      freq = 100 * MHz;
-    }
-  else if (_drv.supp_uhs_timings(Mmc::Uhs_sdr25) && sf.acc_mode_sdr25()
-           && !(_device_type_disable.sd & Mmc::Uhs_sdr25))
-    {
-      mmc_timing = Mmc::Uhs_sdr25;
-      a6_timing = Mmc::Arg_cmd6_switch_func::Grp1_sdr25;
-      freq = 50 * MHz;
-    }
-  else if (_drv.supp_uhs_timings(Mmc::Uhs_sdr12) && sf.acc_mode_sdr12()
-           && !(_device_type_disable.sd & Mmc::Uhs_sdr12))
-    {
-      mmc_timing = Mmc::Uhs_sdr12;
-      a6_timing = Mmc::Arg_cmd6_switch_func::Grp1_sdr12;
-      freq = 25 * MHz;
-    }
-  else
-    {
-      mmc_timing = Mmc::Hs;
-      a6_timing = Mmc::Arg_cmd6_switch_func::Grp1_sdr12;
-      freq = 25 * MHz;
-    }
-
-  // Bus width -- also for HS!
-  if (has_bus_4bit)
-    {
-      Mmc::Arg_acmd6_sd_set_bus_width a6;
-      a6.bus_width() = a6.Bus_width_4bit;
-      mmc_app_cmd(cmd, Mmc::Acmd6_set_bus_width, a6.raw);
-      cmd->check_error("ACMD6: SET_BUS_WIDTH");
-
-      _drv.set_bus_width(Mmc::Width_4bit);
-    }
-
-  if (mmc_timing != Mmc::Hs)
-    {
-      Mmc::Arg_cmd6_switch_func::Grp4_power_limit a6_power;
-      if (_drv.supp_power_limit(Mmc::Power_288w) && sf.power_limit_288w())
-        a6_power = Mmc::Arg_cmd6_switch_func::Grp4_288w;
-      else if (_drv.supp_power_limit(Mmc::Power_216w) && sf.power_limit_216w())
-        a6_power = Mmc::Arg_cmd6_switch_func::Grp4_216w;
-      else if (_drv.supp_power_limit(Mmc::Power_180w) && sf.power_limit_180w())
-        a6_power = Mmc::Arg_cmd6_switch_func::Grp4_180w;
-      else if (_drv.supp_power_limit(Mmc::Power_144w) && sf.power_limit_144w())
-        a6_power = Mmc::Arg_cmd6_switch_func::Grp4_144w;
-      else
-        a6_power = Mmc::Arg_cmd6_switch_func::Grp4_default;
-
-      // Allowed power consumption.
-      if (a6_power != Mmc::Arg_cmd6_switch_func::Grp4_default)
+      if (v18 && _drv.supp_uhs_timings(Mmc::Uhs_sdr104) && sf.acc_mode_sdr104()
+          && !(_device_type_disable.sd & Mmc::Uhs_sdr104))
         {
-          a6.reset();
-          a6.grp4_power_limit() = a6_power;
-          a6.mode() = a6.Set_function;
-          cmd->init_data(Mmc::Cmd6_switch_func, a6.raw, 64, _io_buf.pget(),
-                         reinterpret_cast<l4_addr_t>(_io_buf.get<void>()));
-          cmd_exec(cmd);
-          cmd->check_error("CMD6: SWITCH_FUCN/SET_POWER");
-          if (sf.fun_sel_grp4() == sf.Invalid_function)
-            L4Re::throw_error(-L4_EINVAL, "Invalid function trying to set power");
+          mmc_timing = Mmc::Uhs_sdr104;
+          a6_timing = Mmc::Arg_cmd6_switch_func::Grp1_sdr104;
+          freq = 200 * MHz;
         }
+      else if (v18 && _drv.supp_uhs_timings(Mmc::Uhs_ddr50) && sf.acc_mode_ddr50()
+               && !(_device_type_disable.sd & Mmc::Uhs_ddr50))
+        {
+          mmc_timing = Mmc::Uhs_ddr50;
+          a6_timing = Mmc::Arg_cmd6_switch_func::Grp1_ddr50;
+          freq = 50 * MHz;
+        }
+      else if (v18 && _drv.supp_uhs_timings(Mmc::Uhs_sdr50) && sf.acc_mode_sdr50()
+               && !(_device_type_disable.sd & Mmc::Uhs_sdr50))
+        {
+          mmc_timing = Mmc::Uhs_sdr50;
+          a6_timing = Mmc::Arg_cmd6_switch_func::Grp1_sdr50;
+          freq = 100 * MHz;
+        }
+      else if (_drv.supp_uhs_timings(Mmc::Uhs_sdr25) && sf.acc_mode_sdr25()
+               && !(_device_type_disable.sd & Mmc::Uhs_sdr25))
+        {
+          mmc_timing = Mmc::Uhs_sdr25;
+          a6_timing = Mmc::Arg_cmd6_switch_func::Grp1_sdr25;
+          freq = 50 * MHz;
+        }
+      else if (_drv.supp_uhs_timings(Mmc::Uhs_sdr12) && sf.acc_mode_sdr12()
+               && !(_device_type_disable.sd & Mmc::Uhs_sdr12))
+        {
+          mmc_timing = Mmc::Uhs_sdr12;
+          a6_timing = Mmc::Arg_cmd6_switch_func::Grp1_sdr12;
+          freq = 25 * MHz;
+        }
+      else
+        {
+          mmc_timing = Mmc::Hs;
+          a6_timing = Mmc::Arg_cmd6_switch_func::Grp1_sdr12;
+          freq = 25 * MHz;
+        }
+
+      // Bus width -- also for HS!
+      if (has_bus_4bit)
+        {
+          Mmc::Arg_acmd6_sd_set_bus_width a6;
+          a6.bus_width() = a6.Bus_width_4bit;
+          mmc_app_cmd(cmd, Mmc::Acmd6_set_bus_width, a6.raw);
+          cmd->check_error("ACMD6: SET_BUS_WIDTH");
+
+          _drv.set_bus_width(Mmc::Width_4bit);
+        }
+
+      if (mmc_timing != Mmc::Hs)
+        {
+          Mmc::Arg_cmd6_switch_func::Grp4_power_limit a6_power;
+          if (_drv.supp_power_limit(Mmc::Power_288w) && sf.power_limit_288w())
+            a6_power = Mmc::Arg_cmd6_switch_func::Grp4_288w;
+          else if (_drv.supp_power_limit(Mmc::Power_216w) && sf.power_limit_216w())
+            a6_power = Mmc::Arg_cmd6_switch_func::Grp4_216w;
+          else if (_drv.supp_power_limit(Mmc::Power_180w) && sf.power_limit_180w())
+            a6_power = Mmc::Arg_cmd6_switch_func::Grp4_180w;
+          else if (_drv.supp_power_limit(Mmc::Power_144w) && sf.power_limit_144w())
+            a6_power = Mmc::Arg_cmd6_switch_func::Grp4_144w;
+          else
+            a6_power = Mmc::Arg_cmd6_switch_func::Grp4_default;
+
+          // Allowed power consumption.
+          if (a6_power != Mmc::Arg_cmd6_switch_func::Grp4_default)
+            {
+              a6.reset();
+              a6.grp4_power_limit() = a6_power;
+              a6.mode() = a6.Set_function;
+              cmd->init_data(Mmc::Cmd6_switch_func, a6.raw, 64, _io_buf.pget(),
+                             reinterpret_cast<l4_addr_t>(_io_buf.get<void>()));
+              cmd_exec(cmd);
+              cmd->check_error("CMD6: SWITCH_FUCN/SET_POWER");
+              if (sf.fun_sel_grp4() == sf.Invalid_function)
+                L4Re::throw_error(-L4_EINVAL, "Invalid function trying to set power");
+            }
+        }
+
+      a6.reset();
+      a6.grp1_acc_mode() = a6_timing;
+      a6.mode() = a6.Set_function;
+      cmd->init_data(Mmc::Cmd6_switch_func, a6.raw, 64, _io_buf.pget(),
+                     reinterpret_cast<l4_addr_t>(_io_buf.get<void>()));
+      cmd_exec(cmd);
+      cmd->check_error("CMD6: SWITCH_FUNC/SET_MODE");
+      if (sf.fun_sel_grp1() == sf.Invalid_function)
+        L4Re::throw_error(-L4_EINVAL, "Invalid function trying to set mode");
+
+      _drv.set_clock_and_timing(freq, mmc_timing);
+
+      // Tuning: SDR104: Always. SDR50: Only if controller demands.
+      if (   mmc_timing == Mmc::Uhs_sdr104
+          || mmc_timing == Mmc::Uhs_ddr50
+          || (mmc_timing == Mmc::Uhs_sdr50 && _drv.needs_tuning_sdr50()))
+        {
+          info.printf("Mode '%s' needs tuning...\n", Mmc::str_timing(mmc_timing));
+          _drv.reset_tuning();
+          bool success = false;
+          unsigned i;
+          for (i = 0; i < Mmc::Arg_cmd19_send_tuning_block::Max_loops; ++i)
+            {
+              cmd->init(Mmc::Cmd19_send_tuning_block);
+              cmd_exec(cmd);
+              if (cmd->status == Cmd::Success)
+                {
+                  if (_drv.tuning_finished(&success))
+                    break;
+                }
+              else if (cmd->status == Cmd::Cmd_timeout)
+                break;
+            }
+          if (!success)
+            {
+              _device_type_disable.sd |= mmc_timing;
+              info.printf("\033[31mTuning for mode '%s' failed!\033[m\n",
+                          Mmc::str_timing(mmc_timing));
+              _drv.set_clock_and_timing(400 * KHz, Mmc::Legacy);
+              // Seems this doesn't work. Need to reset more state?
+              continue;
+            }
+
+          _drv.enable_auto_tuning();
+          info.printf("Tuning success.\n");
+        }
+
+      break;
     }
 
-  a6.reset();
-  a6.grp1_acc_mode() = a6_timing;
-  a6.mode() = a6.Set_function;
-  cmd->init_data(Mmc::Cmd6_switch_func, a6.raw, 64, _io_buf.pget(),
-                 reinterpret_cast<l4_addr_t>(_io_buf.get<void>()));
-  cmd_exec(cmd);
-  cmd->check_error("CMD6: SWITCH_FUNC/SET_MODE");
-  if (sf.fun_sel_grp1() == sf.Invalid_function)
-    L4Re::throw_error(-L4_EINVAL, "Invalid function trying to set mode");
-
-  _drv.set_clock_and_timing(freq, mmc_timing);
   _sd_timing = mmc_timing;
 
   warn.printf("Device initialization took %llums (%llums busy wait, %llums sleep).\n",
@@ -1508,6 +1551,8 @@ Device<Driver>::power_up_mmc(Cmd *cmd)
   Mmc::Reg_ecsd::Ec196_device_type device_type_test(0);
   _device_type_selected = Mmc::Reg_ecsd::Ec196_device_type::fallback();
 
+  // Start with the fastest supported mode. On tuning failure, try the next
+  // slower supported mode by masking modes using _device_type_restricted.
   for (;;)
     {
       _device_type_restricted.raw &= ~device_type_test.raw;

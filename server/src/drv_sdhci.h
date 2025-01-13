@@ -1249,6 +1249,21 @@ public:
       }
   };
 
+  /** Return true if the selected timing needs tuning. */
+  bool needs_tuning_sdr50() const
+  {
+    if (TYPE == Sdhci_type::Usdhc)
+      {
+        Reg_host_ctrl_cap cc(this);
+        return cc.use_tuning_sdr50();
+      }
+    else
+      {
+        Reg_cap2_sdhci c2(this);
+        return c2.tune_sdr50();
+      }
+  }
+
   /** Return true if the power limit is supported by the controller. */
   constexpr bool supp_power_limit(Mmc::Power_limit power) const
   {
@@ -1267,6 +1282,9 @@ public:
 
   /** Return true if tuning has finished. */
   bool tuning_finished(bool *success);
+
+  void reset_tuning();
+  void enable_auto_tuning();
 
   /** Return true if the card is busy. */
   constexpr bool card_busy() const
@@ -1322,8 +1340,6 @@ private:
 
   /** Handle interrupts related to the data phase. */
   void handle_irq_data(Cmd *cmd, Reg_int_status is);
-
-  void reset_tuning();
 
   /** Disable clock when changing clock/timing. */
   void clock_disable();
