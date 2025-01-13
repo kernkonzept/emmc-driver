@@ -1,2 +1,2 @@
-requires: libblock-device libio-vbus stdlibs-all drivers-frst libpthread libmbox
+requires: libblock-device libio-vbus stdlibs drivers-frst libpthread libmbox
 maintainer: frank.mehnert@kernkonzept.com
