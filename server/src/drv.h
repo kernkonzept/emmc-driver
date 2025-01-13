@@ -46,8 +46,10 @@ struct Drv : public Drv_base
                l4_uint64_t mmio_base, l4_uint64_t mmio_size,
                Receive_irq receive_irq)
   : _regs(mmio_space.is_valid()
-            ? Hw_regs(new Hw::Mmio_space_register_block<32>(mmio_space, mmio_base, mmio_size))
-            : Hw_regs(new Hw::Mmio_map_register_block<32>(iocap, mmio_base, mmio_size))),
+            ? Hw_regs(new Hw::Mmio_space_register_block<32>(
+                            mmio_space, mmio_base, mmio_size))
+            : Hw_regs(new Hw::Mmio_map_register_block<32>(
+                            iocap, mmio_base, mmio_size))),
     _receive_irq(receive_irq)
   {}
 

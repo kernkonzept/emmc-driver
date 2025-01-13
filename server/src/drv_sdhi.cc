@@ -10,8 +10,10 @@
  */
 
 #include "cmd.h"
+#include "cpg.h"
 #include "debug.h"
 #include "drv_sdhi.h"
+#include "factory.h"
 #include "mmc.h"
 #include "util.h"
 
@@ -22,7 +24,7 @@ namespace Emmc {
 Sdhi::Sdhi(int nr,
            L4::Cap<L4Re::Dataspace> iocap,
            L4::Cap<L4Re::Mmio_space> mmio_space,
-           l4_uint64_t mmio_base, l4_uint64_t mmio_size, Sdhi::Type,
+           l4_uint64_t mmio_base, l4_uint64_t mmio_size,
            L4Re::Util::Shared_cap<L4Re::Dma_space> const &,
            l4_uint32_t, Receive_irq receive_irq)
 : Drv(iocap, mmio_space, mmio_base, mmio_size, receive_irq),
@@ -476,3 +478,66 @@ Sdhi::dump() const
 }
 
 } // namespace Emmc
+
+namespace {
+
+using namespace Emmc;
+
+static Rcar3_cpg *cpg;
+
+static void
+init_cpg()
+{
+  if (!cpg)
+    cpg = new Rcar3_cpg();
+  cpg->enable_clock(3, 12);
+  cpg->enable_register(Rcar3_cpg::Sd2ckcr, 0x201);
+}
+
+/**
+ * SDHI found in RCar3.
+ */
+struct F_sdhi_rcar3 : Factory
+{
+  cxx::Ref_ptr<Device_factory::Device_type>
+  create(unsigned nr, l4_uint64_t mmio_addr, l4_uint64_t mmio_size,
+         L4::Cap<L4Re::Dataspace> iocap, int irq_num, L4_irq_mode irq_mode,
+         L4::Cap<L4::Icu> icu, L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
+         L4Re::Util::Object_registry *registry, l4_uint32_t host_clock,
+         unsigned max_seg, Device_type_disable dt_disable)
+  {
+    L4::Cap<L4Re::Mmio_space> mmio_space;
+    init_cpg();
+    return cxx::make_ref_obj<Device<Sdhi>>(
+             nr, mmio_addr, mmio_size, iocap, mmio_space, irq_num, irq_mode,
+             icu, dma, registry, host_clock, max_seg, dt_disable);
+  }
+};
+
+static F_sdhi_rcar3 f_sdhi_rcar3;
+static Device_type_nopci t_sdhi_rcar3{"renesas,sdhi-r8a7795", &f_sdhi_rcar3};
+
+/**
+ * SDHI found in RCar3 connected to RCar3 emulator.
+ */
+struct F_sdhi_emu : Factory
+{
+  cxx::Ref_ptr<Device_factory::Device_type>
+  create(unsigned nr, l4_uint64_t mmio_addr, l4_uint64_t mmio_size,
+         L4::Cap<L4Re::Dataspace> iocap, int irq_num, L4_irq_mode irq_mode,
+         L4::Cap<L4::Icu> icu, L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
+         L4Re::Util::Object_registry *registry, l4_uint32_t host_clock,
+         unsigned max_seg, Device_type_disable dt_disable) override
+  {
+    auto mmio_space = L4::cap_dynamic_cast<L4Re::Mmio_space>(iocap);
+    init_cpg();
+    return cxx::make_ref_obj<Device<Sdhi>>(
+             nr, mmio_addr, mmio_size, iocap, mmio_space, irq_num, irq_mode,
+             icu, dma, registry, host_clock, max_seg, dt_disable);
+  }
+};
+
+static F_sdhi_rcar3 f_sdhi_emu;
+static Device_type_nopci t_sdhi_emu{"renesas,sdhi-r8a7796", &f_sdhi_emu};
+
+} // namespace

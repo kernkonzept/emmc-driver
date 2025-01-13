@@ -9,43 +9,41 @@
  * \file backend for SDHCI used by i.MX8.
  */
 
-#include <l4/mbox-bcm2835/mbox.h>
 #include <l4/sys/cache.h>
 
 #include "cmd.h"
 #include "debug.h"
-#include "drv_sdhci.h"
 #include "mmc.h"
 #include "util.h"
 
 namespace Emmc {
 
-Sdhci::Sdhci(int nr,
-             L4::Cap<L4Re::Dataspace> iocap,
-             L4::Cap<L4Re::Mmio_space> mmio_space,
-             l4_uint64_t mmio_base, l4_uint64_t mmio_size, Type type,
-             L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
-             l4_uint32_t host_clock, Receive_irq receive_irq)
-: Drv(iocap, mmio_space, mmio_base, mmio_size, receive_irq),
+template <Sdhci_type TYPE>
+Sdhci<TYPE>::Sdhci(int nr,
+                   L4::Cap<L4Re::Dataspace> iocap,
+                   L4::Cap<L4Re::Mmio_space> mmio_space,
+                   l4_uint64_t mmio_base, l4_uint64_t mmio_size,
+                   L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
+                   l4_uint32_t host_clock, Receive_irq receive_irq)
+: Drv<Sdhci<TYPE>>(iocap, mmio_space, mmio_base, mmio_size, receive_irq),
   _adma2_desc_mem("sdhci_adma_buf", 4096, dma,
                   L4Re::Dma_space::Direction::To_device,
                   L4Re::Rm::F::Cache_uncached),
   _adma2_desc_phys(_adma2_desc_mem.pget()),
   _adma2_desc(_adma2_desc_mem.get<Adma2_desc_64>()),
-  _type(type),
   _host_clock(host_clock),
   warn(Dbg::Warn, "sdhci", nr),
   info(Dbg::Info, "sdhci", nr),
   trace(Dbg::Trace, "sdhci", nr),
   trace2(Dbg::Trace2, "sdhci", nr)
 {
-  trace.printf("Assuming %s eMMC controller.\n", type_name(type));
+  trace.printf("Assuming %s eMMC controller.\n", type_name());
 
   // Assume DMA limit of 32-bit / 4GB. SDHCI could also handle 64-bit addresses.
   _dma_limit = 0xffffffffULL;
 
   Reg_cap1_sdhci cap1(this);
-  if (_type == Type::Iproc || _type == Type::Bcm2711)
+  if (TYPE == Sdhci_type::Iproc || TYPE == Sdhci_type::Bcm2711)
     {
       // Fine-grained clock required for Reg_write_delay::write_delayed().
       if (!Util::tsc_available())
@@ -62,12 +60,11 @@ Sdhci::Sdhci(int nr,
           warn.printf("\033[33mActually using host clock of %s.\033[m\n",
               Util::readable_freq(host_clock).c_str());
         }
-
-      if (_type == Type::Bcm2711)
-        init_bcm2711(dma);
     }
 
-  if (!dma_accessible(_adma2_desc_phys, _adma2_desc_mem.size()))
+  init_platform(dma);
+
+  if (!Drv<Sdhci<TYPE>>::dma_accessible(_adma2_desc_phys, _adma2_desc_mem.size()))
     L4Re::throw_error_fmt(-L4_EINVAL,
                           "ADMA2 descriptors at %08llx-%08llx not accessible by DMA",
                           _adma2_desc_phys, _adma2_desc_phys + _adma2_desc_mem.size());
@@ -83,14 +80,15 @@ Sdhci::Sdhci(int nr,
     _adma2_64 = true;
 }
 
-Sdhci::~Sdhci()
+template <Sdhci_type TYPE>
+Sdhci<TYPE>::~Sdhci()
 {
-  if (bcm2835_mbox)
-    delete bcm2835_mbox;
+  done_platform();
 }
 
+template <Sdhci_type TYPE>
 void
-Sdhci::init()
+Sdhci<TYPE>::init()
 {
   Reg_sys_ctrl sc(this);
   sc.dtocv() = Reg_sys_ctrl::Data_timeout::Sdclk_max;
@@ -102,14 +100,14 @@ Sdhci::init()
   vs2.write(this);
 
   sc.rsta() = 1;
-  if (_type == Type::Usdhc)
+  if (TYPE == Sdhci_type::Usdhc)
     sc.raw |= 0xf;
   sc.write(this);
 
   Util::poll(10000, [this] { return !Reg_sys_ctrl(this).rsta(); },
              "Software reset all");
 
-  if (_type == Type::Usdhc)
+  if (TYPE == Sdhci_type::Usdhc)
     {
       Reg_host_ctrl_cap cc(this);
       trace.printf("Host controller capabilities (%08x): sdr50=%d, sdr104=%d, ddr50=%d\n",
@@ -159,7 +157,7 @@ Sdhci::init()
     }
   else
     {
-      if (_type == Type::Iproc || _type == Type::Bcm2711)
+      if (TYPE == Sdhci_type::Iproc || TYPE == Sdhci_type::Bcm2711)
         {
           // SD Host Controller Simplified Specification, Figure 3-3
           sc.raw = 0;
@@ -185,7 +183,7 @@ Sdhci::init()
       Reg_clk_tune_ctrl_status().write(this);
 
       Reg_host_ctrl hc(this);
-      if (_type == Type::Iproc || _type == Type::Bcm2711)
+      if (TYPE == Sdhci_type::Iproc || TYPE == Sdhci_type::Bcm2711)
         {
           hc.voltage_sel() = Reg_host_ctrl::Voltage_33;
           hc.bus_power() = 1;
@@ -195,81 +193,9 @@ Sdhci::init()
     }
 }
 
-void
-Sdhci::init_bcm2711(L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma)
-{
-  auto *e = L4Re::Env::env();
-  auto vbus = L4Re::chkcap(e->get_cap<L4vbus::Vbus>("vbus_mbox"),
-                           "Get 'vbus' capability for mbox device.",
-                           -L4_ENOENT);
-
-  static Dbg log{1, "mbox"};
-  bcm2835_mbox = new Bcm2835_mbox(vbus, log, dma);
-
-  /* See https://github.com/raspberrypi/linux/commit/
-   *     3d2cbb64483691c8f8cf88e17d7d581d9402ac4b
-   * ``emmc2 has different DMA constraints based on SoC revisions...
-   * The firmware will find whether the emmc2bus alias is defined, and if so,
-   * it'll edit the dma-ranges property below accordingly.´´
-   *
-   * Well, that's not possible here.
-   * See https://github.com/raspberrypi/documentation/blob/develop/
-   *     documentation/asciidoc/computers/raspberry-pi/revision-codes.adoc
-   *
-   * Older boards:
-   *  - The EMMC2 bus can only directly address the first 1GB.
-   *    XXX Is that true?
-   *  - The PCIe interface can only directly address the first 3GB.
-   *  - Device tree for emmc2bus:
-   *      #address-cells = <0x02>;
-   *      #size-cells = <0x01>;
-   *      emmc2bus: dma-ranges = <0x00 0xc0000000 0x00 0x00 0x40000000>;
-   *
-   * Newer boards:
-   *  - Device tree for emmc2bus:
-   *      #address-cells = <0x02>;
-   *      #size-cells = <0x01>;
-   *      emmc2bus: dma-ranges = <0x0 0x0 0x0 0x0 0xfc000000>;
-   */
-  Bcm2835_mbox::Soc_rev board_rev{bcm2835_mbox->get_board_rev()};
-  _dma_offset = 0xc0000000UL; // default: assume old revision
-  _dma_limit = 0x3fffffffULL;
-  if (board_rev.new_style())
-    {
-      // Try to detect the C0 stepping
-      switch (board_rev.type())
-        {
-        case 0x11: // 4B
-          if (board_rev.revision() <= 2)
-            break;
-          _dma_offset = 0UL; // new revision
-          _dma_limit = 0xffffffffULL; // XXX is this correct?
-          break;
-        case 0x13: // 400
-          _dma_offset = 0UL; // new revision
-          _dma_limit = 0xffffffffULL; // XXX is this correct?
-          break;
-        }
-    }
-
-  l4_uint64_t memsize;
-  switch (board_rev.memory_size())
-    {
-    case 0: memsize = 256 << 20; break;
-    case 1: memsize = 512 << 20; break;
-    case 2: memsize = 1ULL << 30; break;
-    case 3: memsize = 2ULL << 30; break;
-    case 4: memsize = 4ULL << 30; break;
-    case 5: memsize = 8ULL << 30; break;
-    default: memsize = 0; break;
-    }
-  printf("RAM: %s, Revision: %08x => \033[31;1mDMA offset = %08lx\033[m.\n",
-         memsize ? Util::readable_size(memsize).c_str() : "unknown",
-         board_rev.raw, _dma_offset);
-}
-
+template <Sdhci_type TYPE>
 Cmd *
-Sdhci::handle_irq()
+Sdhci<TYPE>::handle_irq()
 {
   Cmd *cmd = _cmd_queue.working();
   if (cmd)
@@ -294,8 +220,9 @@ Sdhci::handle_irq()
   return cmd;
 }
 
+template <Sdhci_type TYPE>
 void
-Sdhci::handle_irq_cmd(Cmd *cmd, Reg_int_status is)
+Sdhci<TYPE>::handle_irq_cmd(Cmd *cmd, Reg_int_status is)
 {
   Reg_int_status is_ack;
   if (trace.is_active()) // otherwise don't read Reg_int_status_en
@@ -305,7 +232,7 @@ Sdhci::handle_irq_cmd(Cmd *cmd, Reg_int_status is)
     {
       is_ack.ctoe() = 1;
       is_ack.cc() = is.cc();
-      if (_type == Type::Usdhc)
+      if (TYPE == Sdhci_type::Usdhc)
         {
           Reg_pres_state ps(this);
           if (ps.cihb())
@@ -366,8 +293,9 @@ Sdhci::handle_irq_cmd(Cmd *cmd, Reg_int_status is)
     }
 }
 
+template <Sdhci_type TYPE>
 void
-Sdhci::handle_irq_data(Cmd *cmd, Reg_int_status is)
+Sdhci<TYPE>::handle_irq_data(Cmd *cmd, Reg_int_status is)
 {
   Reg_int_status is_ack;
   if (trace.is_active()) // otherwise don't read Reg_int_status_en
@@ -382,7 +310,7 @@ Sdhci::handle_irq_data(Cmd *cmd, Reg_int_status is)
           printf("ADMA error: status=%08x, ADMA addr=%x'%08x, is=%08x\n",
                  Reg_adma_err_status(this).raw, Reg_adma_sys_addr_hi(this).raw,
                  Reg_adma_sys_addr_lo(this).raw, is.raw);
-          if (_type != Type::Usdhc)
+          if (TYPE != Sdhci_type::Usdhc)
             {
               Reg_blk_size bs(this);
               printf("ADMA error: blockcnt=%u, blocksize=%u\n",
@@ -411,7 +339,7 @@ Sdhci::handle_irq_data(Cmd *cmd, Reg_int_status is)
           l4_uint32_t data_xferred = blks_xferred * cmd->blocksize;
           cmd->blockcnt  -= blks_xferred;
           cmd->data_phys += data_xferred;
-          if (_type == Type::Usdhc)
+          if (TYPE == Sdhci_type::Usdhc)
             for (;;)
               if (!Reg_pres_state(this).dla())
                 break;
@@ -460,8 +388,9 @@ Sdhci::handle_irq_data(Cmd *cmd, Reg_int_status is)
  * Wait for the bus being idle before submitting another MMC command to the
  * controller.
  */
+template <Sdhci_type TYPE>
 void
-Sdhci::cmd_wait_available(Cmd const *cmd, bool sleep)
+Sdhci<TYPE>::cmd_wait_available(Cmd const *cmd, bool sleep)
 {
   bool need_data = cmd->flags.has_data() || (cmd->cmd & Mmc::Rsp_check_busy);
   if (   cmd->cmd == Mmc::Cmd12_stop_transmission_rd
@@ -488,8 +417,9 @@ Sdhci::cmd_wait_available(Cmd const *cmd, bool sleep)
 /**
  * Send an MMC command to the controller.
  */
+template <Sdhci_type TYPE>
 void
-Sdhci::cmd_submit(Cmd *cmd)
+Sdhci<TYPE>::cmd_submit(Cmd *cmd)
 {
   if (cmd->status != Cmd::Ready_for_submit)
     L4Re::throw_error(-L4_EINVAL, "Invalid command submit status");
@@ -497,7 +427,7 @@ Sdhci::cmd_submit(Cmd *cmd)
   Reg_cmd_xfr_typ xt;  // SDHCI + uSDHC
   Reg_mix_ctrl mc;     // uSDHC
 
-  if (_type == Type::Usdhc)
+  if (TYPE == Sdhci_type::Usdhc)
     mc.read(this);
 
   xt.cmdinx() = cmd->cmd_idx();
@@ -518,7 +448,7 @@ Sdhci::cmd_submit(Cmd *cmd)
   L4Re::Dma_space::Dma_addr dma_addr = ~0ULL;
 
   if (No_dma_during_setup && cmd->flags.has_data() && cmd->data_virt != 0
-      && (_type == Type::Iproc || _type == Type::Bcm2711))
+      && (TYPE == Sdhci_type::Iproc || TYPE == Sdhci_type::Bcm2711))
     {
       Reg_blk_size bz;
       bz.blkcnt() = cmd->blockcnt;
@@ -531,9 +461,9 @@ Sdhci::cmd_submit(Cmd *cmd)
     }
   else if (cmd->flags.has_data())
     {
-      switch (_type)
+      switch (TYPE)
         {
-        case Type::Usdhc:
+        case Sdhci_type::Usdhc:
           {
             Reg_wtmk_lvl wml(this);
             wml.rd_wml() = Reg_wtmk_lvl::Wml_dma;
@@ -588,7 +518,7 @@ Sdhci::cmd_submit(Cmd *cmd)
           trace2.printf("SDMA: addr=%08llx size=%08zx\n", dma_addr, blk_size);
         }
 
-      if (_type == Type::Usdhc)
+      if (TYPE == Sdhci_type::Usdhc)
         {
           Reg_blk_att ba;
           ba.blkcnt() = cmd->blockcnt;
@@ -616,7 +546,7 @@ Sdhci::cmd_submit(Cmd *cmd)
 
       xt.dpsel() = 1;
 
-      if (_type == Type::Usdhc)
+      if (TYPE == Sdhci_type::Usdhc)
         {
           mc.dmaen() = 1;
           mc.bcen() = !!(cmd->blockcnt > 1);
@@ -633,7 +563,7 @@ Sdhci::cmd_submit(Cmd *cmd)
     }
   else // no data
     {
-      if (_type == Type::Usdhc)
+      if (TYPE == Sdhci_type::Usdhc)
         {
           mc.ac12en() = 0;
           mc.ac23en() = 0;
@@ -649,7 +579,7 @@ Sdhci::cmd_submit(Cmd *cmd)
       || cmd->cmd == Mmc::Cmd21_send_tuning_block)
     {
       l4_uint8_t blksize = cmd->cmd == Mmc::Cmd19_send_tuning_block ? 64 : 128;
-      if (_type == Type::Usdhc)
+      if (TYPE == Sdhci_type::Usdhc)
         {
           Reg_blk_att ba;
           ba.blkcnt() = 1;
@@ -672,9 +602,9 @@ Sdhci::cmd_submit(Cmd *cmd)
       wml.wr_brst_len() = Reg_wtmk_lvl::Brst_dma;
       wml.write(this);
 
-      switch (_type)
+      switch (TYPE)
         {
-        case Type::Usdhc:
+        case Sdhci_type::Usdhc:
           {
             mc.dmaen() = 0;
             mc.bcen() = 0;
@@ -691,8 +621,8 @@ Sdhci::cmd_submit(Cmd *cmd)
             es.write(this);
             break;
           }
-        case Type::Iproc:
-        case Type::Bcm2711:
+        case Sdhci_type::Iproc:
+        case Sdhci_type::Bcm2711:
           {
             Reg_autocmd12_err_status es(this);
             es.smp_clk_sel() = 0;
@@ -714,9 +644,9 @@ Sdhci::cmd_submit(Cmd *cmd)
       dma_addr += _dma_offset;
       if (dma_adma2())
         {
-          switch (_type)
+          switch (TYPE)
             {
-            case Type::Usdhc:
+            case Sdhci_type::Usdhc:
               if (cmd->flags.auto_cmd23())
                 {
                   assert(auto_cmd23());
@@ -728,8 +658,8 @@ Sdhci::cmd_submit(Cmd *cmd)
               else
                 mc.ac23en() = 0;
               break;
-            case Type::Iproc:
-            case Type::Bcm2711:
+            case Sdhci_type::Iproc:
+            case Sdhci_type::Bcm2711:
               if (cmd->flags.auto_cmd23())
                 {
                   assert(auto_cmd23());
@@ -747,7 +677,7 @@ Sdhci::cmd_submit(Cmd *cmd)
         }
       else
         {
-          if (_type == Type::Usdhc)
+          if (TYPE == Sdhci_type::Usdhc)
             for (;;)
               if (!Reg_pres_state(this).dla())
                 break;
@@ -761,7 +691,7 @@ Sdhci::cmd_submit(Cmd *cmd)
   Reg_int_status_en se;
   se.enable_ints(cmd);
   if (No_dma_during_setup && cmd->flags.has_data() && cmd->data_virt != 0
-      && (_type == Type::Iproc || _type == Type::Bcm2711))
+      && (TYPE == Sdhci_type::Iproc || TYPE == Sdhci_type::Bcm2711))
     {
       se.brrsen() = 1;
       se.bwrsen() = 1;
@@ -784,7 +714,7 @@ Sdhci::cmd_submit(Cmd *cmd)
     trace.printf("Send \033[32mCMD%d (arg=%08x) -- %s\033[m\n",
                  cmd->cmd_idx(), cmd->arg, cmd->cmd_to_str().c_str());
 
-  if (_type == Type::Usdhc)
+  if (TYPE == Sdhci_type::Usdhc)
     mc.write(this);
 
   xt.write(this);
@@ -795,8 +725,9 @@ Sdhci::cmd_submit(Cmd *cmd)
 /**
  * Wait for completion of command send phase.
  */
+template <Sdhci_type TYPE>
 void
-Sdhci::cmd_wait_cmd_finished(Cmd *cmd, bool verbose)
+Sdhci<TYPE>::cmd_wait_cmd_finished(Cmd *cmd, bool verbose)
 {
   l4_uint64_t time = Util::read_tsc();
   while (cmd->status == Cmd::Progress_cmd)
@@ -821,8 +752,9 @@ Sdhci::cmd_wait_cmd_finished(Cmd *cmd, bool verbose)
 /**
  * Wait for command completion.
  */
+template <Sdhci_type TYPE>
 void
-Sdhci::cmd_wait_data_finished(Cmd *cmd)
+Sdhci<TYPE>::cmd_wait_data_finished(Cmd *cmd)
 {
   l4_uint64_t time = Util::read_tsc();
   while (cmd->status == Cmd::Progress_data)
@@ -840,8 +772,9 @@ Sdhci::cmd_wait_data_finished(Cmd *cmd)
 /**
  * Fetch response after a command was successfully executed.
  */
+template <Sdhci_type TYPE>
 void
-Sdhci::cmd_fetch_response(Cmd *cmd)
+Sdhci<TYPE>::cmd_fetch_response(Cmd *cmd)
 {
   if (cmd->cmd & Mmc::Rsp_136_bits)
     {
@@ -884,23 +817,26 @@ Sdhci::cmd_fetch_response(Cmd *cmd)
 /**
  * Disable all interrupt sources.
  */
+template <Sdhci_type TYPE>
 void
-Sdhci::mask_interrupts()
+Sdhci<TYPE>::mask_interrupts()
 {
   Reg_int_signal_en se;
   se.write(this);
 }
 
+template <Sdhci_type TYPE>
 void
-Sdhci::show_interrupt_status(char const *s) const
+Sdhci<TYPE>::show_interrupt_status(char const *s) const
 {
   Reg_int_status is(this);
   trace.printf("\033[35%sm%s%08x\033[m\n",
                is.raw ? "" : ";1", s, is.raw);
 }
 
+template <Sdhci_type TYPE>
 void
-Sdhci::set_strobe_dll()
+Sdhci<TYPE>::set_strobe_dll()
 {
   Reg_strobe_dll_ctrl dc;
   dc.strobe_dll_ctrl_reset() = 1;
@@ -921,11 +857,12 @@ Sdhci::set_strobe_dll()
              "REV/SLV");
 }
 
+template <Sdhci_type TYPE>
 void
-Sdhci::set_clock_and_timing(l4_uint32_t freq, Mmc::Timing timing, bool strobe)
+Sdhci<TYPE>::set_clock_and_timing(l4_uint32_t freq, Mmc::Timing timing, bool strobe)
 {
   clock_disable();
-  if (!freq && _type == Type::Usdhc)
+  if (!freq && TYPE == Sdhci_type::Usdhc)
     {
       info.printf("\033[33mClock disabled.\033[m\n");
       return;
@@ -937,7 +874,7 @@ Sdhci::set_clock_and_timing(l4_uint32_t freq, Mmc::Timing timing, bool strobe)
     _ddr_active = true;
   else
     _ddr_active = false;
-  if (_type == Type::Iproc || _type == Type::Bcm2711)
+  if (TYPE == Sdhci_type::Iproc || TYPE == Sdhci_type::Bcm2711)
     {
       Reg_host_ctrl hc(this);
       if (   timing == Mmc::Mmc_hs400
@@ -976,7 +913,7 @@ Sdhci::set_clock_and_timing(l4_uint32_t freq, Mmc::Timing timing, bool strobe)
       info.printf("\033[33mClock disabled.\033[m\n");
       return;
     }
-  if (_type == Type::Usdhc)
+  if (TYPE == Sdhci_type::Usdhc)
     {
       Reg_mix_ctrl mc(this);
       mc.ddr_en() = 0;
@@ -1020,13 +957,14 @@ Sdhci::set_clock_and_timing(l4_uint32_t freq, Mmc::Timing timing, bool strobe)
   clock_enable();
 }
 
+template <Sdhci_type TYPE>
 void
-Sdhci::set_clock(l4_uint32_t freq)
+Sdhci<TYPE>::set_clock(l4_uint32_t freq)
 {
-  switch (_type)
+  switch (TYPE)
     {
-    case Type::Iproc:
-    case Type::Bcm2711:
+    case Sdhci_type::Iproc:
+    case Sdhci_type::Bcm2711:
       {
         if (Reg_cap2_sdhci(this).clock_mult() != 0)
           warn.printf("Reg_cap2_sdhci.clock_mult != 0!");
@@ -1108,12 +1046,13 @@ Sdhci::set_clock(l4_uint32_t freq)
     }
 }
 
+template <Sdhci_type TYPE>
 void
-Sdhci::set_bus_width(Mmc::Bus_width bus_width)
+Sdhci<TYPE>::set_bus_width(Mmc::Bus_width bus_width)
 {
-  switch (_type)
+  switch (TYPE)
     {
-    case Type::Usdhc:
+    case Sdhci_type::Usdhc:
       {
         Reg_prot_ctrl pc(this);
         pc.set_bus_width(bus_width);
@@ -1132,8 +1071,9 @@ Sdhci::set_bus_width(Mmc::Bus_width bus_width)
     }
 }
 
+template <Sdhci_type TYPE>
 void
-Sdhci::set_voltage(Mmc::Voltage voltage)
+Sdhci<TYPE>::set_voltage(Mmc::Voltage voltage)
 {
   if (voltage != Mmc::Voltage_330 && voltage != Mmc::Voltage_180)
     {
@@ -1142,9 +1082,9 @@ Sdhci::set_voltage(Mmc::Voltage voltage)
       return;
     }
 
-  switch (_type)
+  switch (TYPE)
     {
-    case Type::Usdhc:
+    case Sdhci_type::Usdhc:
       {
         Reg_vend_spec vs(this);
         if (voltage == Mmc::Voltage_330)
@@ -1154,19 +1094,13 @@ Sdhci::set_voltage(Mmc::Voltage voltage)
         vs.write(this);
         break;
       }
-    case Type::Bcm2711:
+    case Sdhci_type::Bcm2711:
       {
-        l4_uint32_t gpio_set_value;
-        if (voltage == Mmc::Voltage_330)
-          gpio_set_value = 0;
-        else
-          gpio_set_value = 1;
-        bcm2835_mbox->set_fw_gpio(Bcm2835_mbox::Raspi_exp_gpio_vdd_sd_io_sel,
-                                  gpio_set_value);
+        set_voltage_18(voltage == Mmc::Voltage_180);
         delay(10);
       }
       [[fallthrough]];
-    case Type::Iproc:
+    case Sdhci_type::Iproc:
       {
         Reg_host_ctrl2 hc2(this);
         if (voltage == Mmc::Voltage_330)
@@ -1195,10 +1129,11 @@ Sdhci::set_voltage(Mmc::Voltage voltage)
   info.printf("\033[33mSet voltage to %s.\033[m\n", Mmc::str_voltage(voltage));
 }
 
+template <Sdhci_type TYPE>
 void
-Sdhci::clock_disable()
+Sdhci<TYPE>::clock_disable()
 {
-  if (_type == Type::Usdhc)
+  if (TYPE == Sdhci_type::Usdhc)
     {
       // uSDHC: 10.3.6.7
       Reg_vend_spec vs(this);
@@ -1210,10 +1145,11 @@ Sdhci::clock_disable()
     }
 }
 
+template <Sdhci_type TYPE>
 void
-Sdhci::clock_enable()
+Sdhci<TYPE>::clock_enable()
 {
-  if (_type == Type::Usdhc)
+  if (TYPE == Sdhci_type::Usdhc)
     {
       Reg_vend_spec vs(this);
       vs.frc_sdclk_on() = 1;
@@ -1224,10 +1160,11 @@ Sdhci::clock_enable()
     }
 }
 
+template <Sdhci_type TYPE>
 void
-Sdhci::reset_tuning()
+Sdhci<TYPE>::reset_tuning()
 {
-  if (_type == Type::Usdhc)
+  if (TYPE == Sdhci_type::Usdhc)
     {
       if (Usdhc_std_tuning)
         {
@@ -1239,8 +1176,9 @@ Sdhci::reset_tuning()
     }
 }
 
+template <Sdhci_type TYPE>
 bool
-Sdhci::tuning_finished(bool *success)
+Sdhci<TYPE>::tuning_finished(bool *success)
 {
   Reg_autocmd12_err_status es(this);
   if (es.execute_tuning())
@@ -1250,14 +1188,15 @@ Sdhci::tuning_finished(bool *success)
   return true;
 }
 
+template <Sdhci_type TYPE>
 Mmc::Reg_ocr
-Sdhci::supported_voltage() const
+Sdhci<TYPE>::supported_voltage() const
 {
   Mmc::Reg_ocr ocr(0);
-  switch (_type)
+  switch (TYPE)
     {
-    case Type::Iproc:
-    case Type::Bcm2711:
+    case Sdhci_type::Iproc:
+    case Sdhci_type::Bcm2711:
       {
         Reg_cap1_sdhci cap1(this);
         if (cap1.vs33())
@@ -1281,13 +1220,14 @@ Sdhci::supported_voltage() const
   return ocr;
 }
 
+template <Sdhci_type TYPE>
 bool
-Sdhci::xpc_supported(Mmc::Voltage voltage) const
+Sdhci<TYPE>::xpc_supported(Mmc::Voltage voltage) const
 {
-  switch (_type)
+  switch (TYPE)
     {
-    case Type::Iproc:
-    case Type::Bcm2711:
+    case Sdhci_type::Iproc:
+    case Sdhci_type::Bcm2711:
       {
         // For XPC the controller supports up to 540mW at the desired voltage.
         Reg_max_current mc(this);
@@ -1310,8 +1250,9 @@ Sdhci::xpc_supported(Mmc::Voltage voltage) const
     }
 }
 
+template <Sdhci_type TYPE>
 void
-Sdhci::dump() const
+Sdhci<TYPE>::dump() const
 {
   warn.printf("Registers:\n");
   for (unsigned i = 0; i < 0x128; i += 16)
@@ -1332,10 +1273,11 @@ Sdhci::dump() const
  *
  * \note The descriptor memory is mapped uncached so cache flush not required!
  */
-template<typename T>
+template <Sdhci_type TYPE>
+template <typename T>
 T*
-Sdhci::adma2_set_descs_mem_region(T *desc, l4_uint64_t phys, l4_uint32_t size,
-                                  bool terminate)
+Sdhci<TYPE>::adma2_set_descs_mem_region(T *desc, l4_uint64_t phys,
+                                        l4_uint32_t size, bool terminate)
 {
   for (; size; ++desc)
     {
@@ -1366,9 +1308,10 @@ Sdhci::adma2_set_descs_mem_region(T *desc, l4_uint64_t phys, l4_uint32_t size,
  *
  * Test for each block if the bounce buffer is required.
  */
-template<typename T>
+template <Sdhci_type TYPE>
+template <typename T>
 void
-Sdhci::adma2_set_descs(T *descs, Cmd *cmd)
+Sdhci<TYPE>::adma2_set_descs(T *descs, Cmd *cmd)
 {
   trace2.printf("adma2_set_descs @ %08lx:\n", (l4_addr_t)descs);
 
@@ -1407,8 +1350,9 @@ Sdhci::adma2_set_descs(T *descs, Cmd *cmd)
  * Each descriptor occupies 8 bytes (with 32-bit addresses) so we are able to
  * handle up to 512 blocks (using a 4K descriptor page).
  */
+template <Sdhci_type TYPE>
 void
-Sdhci::adma2_set_descs_blocks(Cmd *cmd)
+Sdhci<TYPE>::adma2_set_descs_blocks(Cmd *cmd)
 {
   if (_adma2_64)
     adma2_set_descs<Adma2_desc_64>(_adma2_desc, cmd);
@@ -1419,8 +1363,9 @@ Sdhci::adma2_set_descs_blocks(Cmd *cmd)
 /**
  * Set up an ADMA2 descriptor table for internal commands (for example CMD8).
  */
+template <Sdhci_type TYPE>
 void
-Sdhci::adma2_set_descs_memory_region(l4_addr_t phys, l4_uint32_t size)
+Sdhci<TYPE>::adma2_set_descs_memory_region(l4_addr_t phys, l4_uint32_t size)
 {
   if (_adma2_64)
     adma2_set_descs_mem_region<Adma2_desc_64>(_adma2_desc, phys, size);
@@ -1428,9 +1373,10 @@ Sdhci::adma2_set_descs_memory_region(l4_addr_t phys, l4_uint32_t size)
     adma2_set_descs_mem_region<Adma2_desc_32>(_adma2_desc, phys, size);
 }
 
+template <Sdhci_type TYPE>
 template<typename T>
 void
-Sdhci::adma2_dump_descs(T const *desc) const
+Sdhci<TYPE>::adma2_dump_descs(T const *desc) const
 {
   for (;; ++desc)
     {
@@ -1446,8 +1392,9 @@ Sdhci::adma2_dump_descs(T const *desc) const
     }
 }
 
+template <Sdhci_type TYPE>
 void
-Sdhci::adma2_dump_descs() const
+Sdhci<TYPE>::adma2_dump_descs() const
 {
   printf("ADMA descriptors (%d-bit) at phys=%08llx / virt=%08lx\n",
          _adma2_64 ? 64 : 32, _adma2_desc_phys + _dma_offset,
@@ -1458,8 +1405,9 @@ Sdhci::adma2_dump_descs() const
     adma2_dump_descs<Adma2_desc_32>(_adma2_desc);
 }
 
+template <Sdhci_type TYPE>
 void
-Sdhci::Reg_write_delay::write_delayed(Sdhci *sdhci, Regs offs, l4_uint32_t val)
+Sdhci<TYPE>::Reg_write_delay::write_delayed(Sdhci *sdhci, Regs offs, l4_uint32_t val)
 {
   sdhci->write_delay();
   sdhci->_regs[offs] = val;

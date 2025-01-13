@@ -8,18 +8,16 @@
  */
 
 #include <getopt.h>
-#include <map>
 
 #include <l4/sys/factory>
 #include <l4/vbus/vbus>
 #include <l4/vbus/vbus_pci>
-#include <l4/vbus/vbus_interfaces.h>
 #include <l4/libblock-device/block_device_mgr.h>
 #include <terminate_handler-l4>
 
-#include "cpg.h"
 #include "device.h"
 #include "debug.h"
+#include "factory.h"
 #include "mmc.h"
 #include "util.h"
 
@@ -57,34 +55,8 @@ static char const *usage_str =
 " --readonly           Only allow read-only access to the device\n"
 " --dma-map-all        Map the entire client dataspace permanently\n";
 
-using Emmc_client_type = Block_device::Virtio_client<Emmc::Base_device>;
-
-struct Emmc_device_factory
-{
-  using Device_type = Emmc::Base_device;
-  using Client_type = Emmc_client_type;
-  using Part_device = Emmc::Part_device;
-
-  static cxx::unique_ptr<Client_type>
-  create_client(cxx::Ref_ptr<Device_type> const &dev, unsigned numds,
-                bool readonly)
-  {
-    return cxx::make_unique<Client_type>(dev, numds, readonly);
-  }
-
-  static cxx::Ref_ptr<Device_type>
-  create_partition(cxx::Ref_ptr<Device_type> const &dev, unsigned partition_id,
-                   Block_device::Partition_info const &pi)
-  {
-    return cxx::Ref_ptr<Device_type>(new Part_device(dev, partition_id, pi));
-  }
-};
-
-using Base_device_mgr = Block_device::Device_mgr<Emmc::Base_device,
-                                                 Emmc_device_factory>;
-
 class Blk_mgr
-: public Base_device_mgr,
+: public Emmc::Base_device_mgr,
   public L4::Epiface_t<Blk_mgr, L4::Factory>
 {
   class Deletion_irq : public L4::Irqep_t<Deletion_irq>
@@ -99,7 +71,7 @@ class Blk_mgr
 
 public:
   Blk_mgr(L4Re::Util::Object_registry *registry)
-  : Base_device_mgr(registry),
+  : Emmc::Base_device_mgr(registry),
     _del_irq(this)
   {
     auto c = L4Re::chkcap(registry->register_irq_obj(&_del_irq),
@@ -283,9 +255,7 @@ struct Client_opts
 static Block_device::Errand::Errand_server server;
 static Blk_mgr drv(server.registry());
 static unsigned devices_in_scan = 0;
-static unsigned device_nr = 0;
-
-static Rcar3_cpg *cpg;
+static unsigned devices_found = 0;
 
 static int
 parse_args(int argc, char *const *argv)
@@ -439,261 +409,6 @@ device_scan_finished()
     trace.printf("Device now accepts new clients.\n");
 }
 
-static L4Re::Util::Shared_cap<L4Re::Dma_space>
-create_dma_space(L4::Cap<L4vbus::Vbus> bus, long unsigned id)
-{
-  static std::map<long unsigned, L4Re::Util::Shared_cap<L4Re::Dma_space>> spaces;
-
-  auto ires = spaces.find(id);
-  if (ires != spaces.end())
-    return ires->second;
-
-  auto dma = L4Re::chkcap(L4Re::Util::make_shared_cap<L4Re::Dma_space>(),
-                          "Allocate capability for DMA space.");
-  L4Re::chksys(L4Re::Env::env()->user_factory()->create(dma.get()),
-               "Create DMA space.");
-  L4Re::chksys(
-    bus->assign_dma_domain(id, L4VBUS_DMAD_BIND | L4VBUS_DMAD_L4RE_DMA_SPACE,
-                           dma.get()),
-    "Assignment of DMA domain.");
-  spaces[id] = dma;
-  return dma;
-}
-
-static void
-pci_device(L4vbus::Pci_dev const &dev, l4_uint64_t &mmio_addr,
-           l4_uint64_t &mmio_size, int &irq_num, L4_irq_mode &irq_mode)
-{
-  l4_uint32_t addr;
-  l4_uint32_t size;
-  L4Re::chksys(dev.cfg_read(0x10, &addr, 32), "Read PCI cfg BAR0 (addr).");
-  mmio_addr = addr & ~0xfU;
-  L4Re::chksys(dev.cfg_write(0x10, ~0U, 32), "Write PCI cfg BAR0.");
-  L4Re::chksys(dev.cfg_read(0x10, &size, 32), "Read PCI cfg BAR0 (size).");
-  L4Re::chksys(dev.cfg_write(0x10, addr, 32), "Write PCI cfg BAR0 (restore.");
-  if (size & 1)
-    L4Re::throw_error(-L4_EINVAL, "First PCI BAR maps into memory");
-  if ((size & 6) != 0)
-    L4Re::throw_error(-L4_EINVAL, "First PCI BAR is 32-bits wide");
-  mmio_size = -(size & ~0xfU);
-
-  l4_uint32_t cmd;
-  L4Re::chksys(dev.cfg_read(0x04, &cmd, 16), "Read PCI cfg command.");
-  if (!(cmd & 4))
-    {
-      trace.printf("Enable PCI bus master.\n");
-      cmd |= 4;
-      L4Re::chksys(dev.cfg_write(0x04, cmd, 16), "Write PCI cfg command.");
-    }
-
-  unsigned char polarity;
-  unsigned char trigger;
-  irq_num = L4Re::chksys(dev.irq_enable(&trigger, &polarity),
-                         "Enable interrupt.");
-
-  if (trigger == 0)
-    irq_mode = L4_IRQ_F_LEVEL_HIGH;
-  else
-    irq_mode = L4_IRQ_F_EDGE;
-}
-
-static bool
-nopci_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
-             l4_uint64_t &mmio_addr, l4_uint64_t &mmio_size, int &irq_num,
-             L4_irq_mode &irq_mode)
-{
-  for (unsigned i = 0;
-       i < dev_info.num_resources && (!mmio_addr || !irq_num); ++i)
-    {
-      l4vbus_resource_t res;
-      L4Re::chksys(dev.get_resource(i, &res));
-      if (res.type == L4VBUS_RESOURCE_MEM)
-        {
-          if (!mmio_addr)
-            {
-              mmio_addr = res.start;
-              mmio_size = res.end - res.start + 1;
-            }
-        }
-      else if (res.type == L4VBUS_RESOURCE_IRQ)
-        {
-          if (!irq_num)
-            {
-              irq_num = res.start;
-              irq_mode = L4_irq_mode(res.flags);
-            }
-        }
-    }
-
-  if (!mmio_addr)
-    {
-      info.printf("Device '%s' has no MMIO resource.\n", dev_info.name);
-      return false;
-    }
-
-  if (!irq_num)
-    {
-      info.printf("Device '%s' has no IRQ resource.\n", dev_info.name);
-      return false;
-    }
-
-  return true;
-}
-
-static void
-scan_device(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
-            L4::Cap<L4vbus::Vbus> bus, L4::Cap<L4::Icu> icu)
-{
-  l4_uint64_t mmio_addr = 0;
-  l4_uint64_t mmio_size = 0;
-  int irq_num = 0;
-  L4_irq_mode irq_mode = L4_IRQ_F_LEVEL_HIGH;
-
-  enum Dev_type
-  {
-    Dev_unknown = 0,
-    Dev_qemu_sdhci,     // QEMU SDHCI (PCI)
-    Dev_usdhc,          // i.MX8 uSDHC
-    Dev_sdhi_emu,       // RCar3 SDHI -- emulator
-    Dev_sdhi_rcar3,     // RCar3 SDHI -- bare metal
-    Dev_bcm2711,        // Broadcom Bcm2711-emmc2 on RPI4
-  };
-  Dev_type dev_type = Dev_unknown;
-
-  if (l4vbus_subinterface_supported(dev_info.type, L4VBUS_INTERFACE_PCIDEV))
-    {
-      l4_uint32_t vendor_device = 0;
-      if (dev.cfg_read(0, &vendor_device, 32) != L4_EOK)
-        return;
-
-      l4_uint32_t class_code;
-      L4Re::chksys(dev.cfg_read(8, &class_code, 32));
-      class_code >>= 8;
-
-      info.printf("Found PCI device %04x:%04x (class=%06x).\n",
-                  vendor_device & 0xffff, (vendor_device & 0xffff0000) >> 16,
-                  class_code);
-
-      // class     = 08 (generic system peripherals)
-      // subclass  = 04 (SD host controller)
-      // interface = 01 (according to QEMU)
-      if (class_code != 0x80501)
-        return;
-
-      pci_device(dev, mmio_addr, mmio_size, irq_num, irq_mode);
-      dev_type = Dev_qemu_sdhci;
-    }
-  else
-    {
-      if (   dev.is_compatible("fsl,imx8mq-usdhc") == 1
-          || dev.is_compatible("fsl,imx8qm-usdhc") == 1
-          || dev.is_compatible("fsl,imx7d-usdhc") == 1)
-        dev_type = Dev_usdhc;
-      else if (dev.is_compatible("renesas,sdhi-r8a7795") == 1)
-        dev_type = Dev_sdhi_rcar3;
-      else if (dev.is_compatible("renesas,sdhi-r8a7796") == 1)
-        dev_type = Dev_sdhi_emu;
-      else if (dev.is_compatible("brcm,bcm2711-emmc2") == 1)
-        dev_type = Dev_bcm2711;
-      else
-        return; // no match
-
-      if (!nopci_device(dev, dev_info, mmio_addr, mmio_size, irq_num, irq_mode))
-        return; // matched device resource problem
-    }
-
-  unsigned long id = -1UL;
-  for (auto i = 0u; i < dev_info.num_resources; ++i)
-    {
-      l4vbus_resource_t res;
-      L4Re::chksys(dev.get_resource(i, &res), "Getting resource.");
-      if (res.type == L4VBUS_RESOURCE_DMA_DOMAIN)
-        {
-          id = res.start;
-          Dbg::trace().printf("Using device's DMA domain %lu.\n", res.start);
-          break;
-        }
-    }
-
-  if (id == -1UL)
-    Dbg::trace().printf("Using VBUS global DMA domain.\n");
-
-  info.printf("Device @ %08llx: %sinterrupt: %d, %s-triggered.\n",
-              mmio_addr, dev_type == Dev_qemu_sdhci ? "PCI " : "", irq_num,
-              irq_mode == L4_IRQ_F_LEVEL_HIGH ? "level-high" : "edge");
-
-  // XXX
-  l4_uint32_t host_clock = 400000;
-  switch (mmio_addr)
-    {
-    case 0x30b40000: host_clock = 400000000; break;
-    case 0x30b50000: host_clock = 200000000; break;
-    case 0x30b60000: host_clock = 200000000; break;
-    case 0x5b010000: host_clock = 396000000; break;
-    case 0x5b020000: host_clock = 198000000; break;
-    case 0x5b030000: host_clock = 198000000; break;
-    case 0xfe340000: host_clock = 100000000; break;
-    default:
-         if (dev_type == Dev_usdhc)
-           L4Re::throw_error(-L4_EINVAL, "Unknown host clock");
-         break;
-    }
-  warn.printf("\033[33mAssuming host clock of %s.\033[m\n",
-              Util::readable_freq(host_clock).c_str());
-
-  ++devices_in_scan;
-  try
-    {
-      // Here we can select the proper device type.
-      auto iocap = dev.bus_cap();
-      L4::Cap<L4Re::Mmio_space> mmio_space = L4::Cap<L4Re::Mmio_space>::Invalid;
-      auto dma = create_dma_space(bus, id);
-      switch (dev_type)
-        {
-        case Dev_qemu_sdhci:
-        case Dev_usdhc:
-        case Dev_bcm2711:
-          {
-            using Type = Emmc::Sdhci::Type;
-            Type const type = dev_type == Dev_usdhc
-                                ? Type::Usdhc
-                                : dev_type == Dev_bcm2711
-                                    ? Type::Bcm2711
-                                    : Type::Sdhci;
-            drv.add_disk(cxx::make_ref_obj<Emmc::Device<Emmc::Sdhci>>(
-                           device_nr++, mmio_addr, mmio_size, iocap, mmio_space,
-                           irq_num, irq_mode, icu, dma, server.registry(),
-                           type, host_clock, max_seg, device_type_disable),
-                         device_scan_finished);
-            break;
-          }
-
-        case Dev_sdhi_emu:
-          mmio_space = L4::cap_dynamic_cast<L4Re::Mmio_space>(iocap);
-          [[fallthrough]];
-        case Dev_sdhi_rcar3:
-          if (!cpg)
-            cpg = new Rcar3_cpg(bus);
-          cpg->enable_clock(3, 12);
-          cpg->enable_register(Rcar3_cpg::Sd2ckcr, 0x201);
-          drv.add_disk(cxx::make_ref_obj<Emmc::Device<Emmc::Sdhi>>(
-                         device_nr++, mmio_addr, mmio_size, iocap, mmio_space,
-                         irq_num, irq_mode, icu, dma, server.registry(),
-                         Emmc::Sdhi::Type::Sdhi, host_clock, max_seg,
-                         device_type_disable),
-                       device_scan_finished);
-          break;
-
-        default:
-          L4Re::throw_error(-L4_EINVAL, "Unhandled switch case");
-        }
-    }
-  catch (L4::Runtime_error const &e)
-    {
-      warn.printf("%s: %s. Skipping.\n", e.str(), e.extra_str());
-    }
-}
-
 static void
 device_discovery(L4::Cap<L4vbus::Vbus> bus, L4::Cap<L4::Icu> icu)
 {
@@ -703,19 +418,30 @@ device_discovery(L4::Cap<L4vbus::Vbus> bus, L4::Cap<L4::Icu> icu)
   l4vbus_device_t di;
   auto root = bus->root();
 
-  // make sure that we don't finish device scan before the while loop is done
+  // make sure that we don't finish device scan before the loop is done
   ++devices_in_scan;
 
   while (root.next_device(&child, L4VBUS_MAX_DEPTH, &di) == L4_EOK)
     {
       trace.printf("Scanning child 0x%lx (%s).\n", child.dev_handle(), di.name);
-      scan_device(child, di, bus, icu);
+      auto dev = Emmc::Factory::create_dev(child, di, bus, icu,
+                                           server.registry(), max_seg,
+                                           device_type_disable);
+      if (dev)
+        {
+          ++devices_found;
+          ++devices_in_scan;
+          drv.add_disk(std::move(dev), device_scan_finished);
+        }
     }
 
   // marks the end of the device detection loop
   device_scan_finished();
 
-  info.printf("All devices scanned.\n");
+  if (devices_found)
+    info.printf("All devices scanned. Found %u suitable.\n", devices_found);
+  else
+    info.printf("All devices scanned. No suitable found!\n");
 }
 
 static void

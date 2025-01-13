@@ -13,6 +13,7 @@
 #include <l4/cxx/minmax>
 #include <l4/sys/ktrace.h>
 
+#include "debug.h"
 #include "drv.h"
 #include "inout_buffer.h"
 
@@ -27,32 +28,47 @@ class Bcm2835_mbox;
 
 namespace Emmc {
 
-class Sdhci : public Drv<Sdhci>
+enum class Sdhci_type
 {
-  friend Drv;
+  Plain,   ///< Plain Sdhci driver.
+  Usdhc,   ///< Sdhci driver with uSDHC modifications (NXP eSDHC i.MX).
+  Iproc,   ///< Sdhci driver with iproc/arasan modifications.
+  Bcm2711, /// Like iproc/arasan with bcm2711-specific modifications.
+};
+
+template <Sdhci_type TYPE>
+class Sdhci : public Drv<Sdhci<TYPE>>
+{
+  friend Drv<Sdhci<TYPE>>;
 
   // Enable to generate kernel tracebuffer records for every SDHCI register
   // read/write access.
   enum { Trace_reg_access = false };
 
 public:
-  enum class Type
-  {
-    Sdhci, ///< Sdhci driver
-    Usdhc, ///< Sdhci driver with uSDHC modifications (NXP eSDHC i.MX)
-    Iproc, ///< Sdhci driver with iproc/arasan modifications
-    Bcm2711, /// Like iproc/arasan with bcm2711-specific more modifications
-  };
+  // XXX Can we avoid this?
+  using Drv<Sdhci<TYPE>>::_dma_limit;
+  using Drv<Sdhci<TYPE>>::_cmd_queue;
+  using Drv<Sdhci<TYPE>>::_time_sleep;
+  using Drv<Sdhci<TYPE>>::_bb_virt;
+  using Drv<Sdhci<TYPE>>::_bb_phys;
+  using Drv<Sdhci<TYPE>>::_bb_size;
+  using Drv<Sdhci<TYPE>>::_receive_irq;
+  using Drv<Sdhci<TYPE>>::_regs;
+  using Drv<Sdhci<TYPE>>::provided_bounce_buffer;
+  using Drv<Sdhci<TYPE>>::dma_accessible;
+  using Drv<Sdhci<TYPE>>::delay;
 
+public:
   static bool auto_cmd12()
   { return Auto_cmd12; }
 
   bool auto_cmd23() const
   {
     return Auto_cmd23
-           && (   _type == Type::Usdhc
-               || _type == Type::Iproc
-               || _type == Type::Bcm2711);
+           && (   TYPE == Sdhci_type::Usdhc
+               || TYPE == Sdhci_type::Iproc
+               || TYPE == Sdhci_type::Bcm2711);
   }
 
   bool dma_adma2() const
@@ -185,37 +201,38 @@ private:
   struct Reg : public Reg_write_delay
   {
     explicit Reg() : raw(0) {}
-    explicit Reg(Sdhci const *sdhci)
+    explicit Reg(Sdhci<TYPE> const *sdhci)
     : raw(sdhci->_regs[offs])
     {
       if (Trace_reg_access)
         fiasco_tbuf_log_3val("read ", offs, raw, 0);
     }
     explicit Reg(l4_uint32_t v) : raw(v) {}
-    l4_uint32_t read(Sdhci const *sdhci)
+    l4_uint32_t read(Sdhci<TYPE> const *sdhci)
     {
       raw = sdhci->_regs[offs];
       if (Trace_reg_access)
         fiasco_tbuf_log_3val("read ", offs, raw, 0);
       return raw;
     }
-    void write(Sdhci *sdhci)
+    void write(Sdhci<TYPE> *sdhci)
     {
       if (Trace_reg_access)
         fiasco_tbuf_log_3val("WRITE", offs, raw, 0);
-      write_delayed(sdhci, offs, raw);
+      Reg_write_delay::write_delayed(sdhci, offs, raw);
     }
     l4_uint32_t raw;
   };
 
   /// 0x00: DMA System Address
-  struct Reg_ds_addr : public Reg<Ds_addr> { using Reg::Reg; };
-  struct Reg_cmd_arg2 : public Reg<Ds_addr> { using Reg::Reg; };
+  struct Reg_ds_addr : public Reg<Ds_addr> { using Reg<Ds_addr>::Reg; };
+  struct Reg_cmd_arg2 : public Reg<Ds_addr> { using Reg<Ds_addr>::Reg; };
 
   /// 0x04: uSDHC: Block Attributes
   struct Reg_blk_att : public Reg<Blk_att>
   {
-    using Reg::Reg;
+    using Reg<Blk_att>::Reg;
+    using Reg<Blk_att>::raw;
 
     CXX_BITFIELD_MEMBER(16, 31, blkcnt, raw); ///< Blocks count for transfer
     CXX_BITFIELD_MEMBER(0, 12, blksize, raw); ///< Transfer block size
@@ -224,7 +241,8 @@ private:
   /// 0x04: SDHCI: Block Size Register
   struct Reg_blk_size : public Reg<Blk_size>
   {
-    using Reg::Reg;
+    using Reg<Blk_size>::Reg;
+    using Reg<Blk_size>::raw;
 
     CXX_BITFIELD_MEMBER(16, 31, blkcnt, raw); ///< Blocks count for transfer
     CXX_BITFIELD_MEMBER(12, 14, sdma_buf_bndry, raw); ///< SDMA buffer boundary
@@ -243,12 +261,13 @@ private:
   };
 
   /// 0x08: Command Argument
-  struct Reg_cmd_arg : public Reg<Cmd_arg> { using Reg::Reg; };
+  struct Reg_cmd_arg : public Reg<Cmd_arg> { using Reg<Cmd_arg>::Reg; };
 
   /// 0x0c: Command Transfer Type
   struct Reg_cmd_xfr_typ : public Reg<Cmd_xfr_typ>
   {
-    using Reg::Reg;
+    using Reg<Cmd_xfr_typ>::Reg;
+    using Reg<Cmd_xfr_typ>::raw;
 
     CXX_BITFIELD_MEMBER(24, 29, cmdinx, raw); ///< Command index
     CXX_BITFIELD_MEMBER(22, 23, cmdtyp, raw); ///< Command type
@@ -287,21 +306,22 @@ private:
   };
 
   /// 0x10 .. 0x1c: Command response words
-  struct Reg_cmd_rsp0 : public Reg<Cmd_rsp0> { using Reg::Reg; };
-  struct Reg_cmd_rsp1 : public Reg<Cmd_rsp1> { using Reg::Reg; };
-  struct Reg_cmd_rsp2 : public Reg<Cmd_rsp2> { using Reg::Reg; };
-  struct Reg_cmd_rsp3 : public Reg<Cmd_rsp3> { using Reg::Reg; };
+  struct Reg_cmd_rsp0 : public Reg<Cmd_rsp0> { using Reg<Cmd_rsp0>::Reg; };
+  struct Reg_cmd_rsp1 : public Reg<Cmd_rsp1> { using Reg<Cmd_rsp1>::Reg; };
+  struct Reg_cmd_rsp2 : public Reg<Cmd_rsp2> { using Reg<Cmd_rsp2>::Reg; };
+  struct Reg_cmd_rsp3 : public Reg<Cmd_rsp3> { using Reg<Cmd_rsp3>::Reg; };
 
   /// 0x20: Buffer Data Port Register
   struct Reg_data_buff_acc_port : public Reg<Data_buff_acc_port>
   {
-    using Reg::Reg;
+    using Reg<Data_buff_acc_port>::Reg;
   };
 
   /// 0x24: Present State
   struct Reg_pres_state : public Reg<Pres_state>
   {
-    using Reg::Reg;
+    using Reg<Pres_state>::Reg;
+    using Reg<Pres_state>::raw;
 
     // >>> uSDHC
     CXX_BITFIELD_MEMBER(31, 31, d7lsl, raw); ///< DATA7 line signal level
@@ -343,7 +363,8 @@ private:
   /// 0x28: Protocol Control (uSDHC)
   struct Reg_prot_ctrl : public Reg<Prot_ctrl>
   {
-    using Reg::Reg;
+    using Reg<Prot_ctrl>::Reg;
+    using Reg<Prot_ctrl>::raw;
 
     CXX_BITFIELD_MEMBER(30, 30, non_exact_b_lk_rd, raw); ///< Non-exact block rd
     CXX_BITFIELD_MEMBER(27, 29, burst_len_en, raw); ///< BURST length enable
@@ -412,7 +433,8 @@ private:
   /// 0x28: Host Control (SDHCI, iproc)
   struct Reg_host_ctrl : public Reg<Host_ctrl>
   {
-    using Reg::Reg;
+    using Reg<Host_ctrl>::Reg;
+    using Reg<Host_ctrl>::raw;
 
     CXX_BITFIELD_MEMBER(24, 31, wakeup, raw);
     CXX_BITFIELD_MEMBER(16, 23, gapctrl, raw);
@@ -476,7 +498,8 @@ private:
   /// 0x2c: System Control
   struct Reg_sys_ctrl : public Reg<Sys_ctrl>
   {
-    using Reg::Reg;
+    using Reg<Sys_ctrl>::Reg;
+    using Reg<Sys_ctrl>::raw;
 
     CXX_BITFIELD_MEMBER(28, 28, rstt, raw);   ///< Reset tuning
     CXX_BITFIELD_MEMBER(27, 27, inita, raw);  ///< Initialization active
@@ -537,7 +560,8 @@ private:
   /// 0x30: Interrupt Status
   struct Reg_int_status : public Reg<Int_status>
   {
-    using Reg::Reg;
+    using Reg<Int_status>::Reg;
+    using Reg<Int_status>::raw;
 
     CXX_BITFIELD_MEMBER(28, 28, dmae, raw);  ///< DMA error
     CXX_BITFIELD_MEMBER(26, 26, tne, raw);   ///< Tuning error
@@ -601,7 +625,8 @@ private:
   /// 0x34: Interrupt Status Enable (SE)
   struct Reg_int_status_en : public Reg<Int_status_en>
   {
-    using Reg::Reg;
+    using Reg<Int_status_en>::Reg;
+    using Reg<Int_status_en>::raw;
 
     CXX_BITFIELD_MEMBER(28, 28, dmaesen, raw);  ///< DMA error SE
     CXX_BITFIELD_MEMBER(26, 26, tnesen, raw);   ///< Tuning error SE
@@ -654,7 +679,8 @@ private:
   /// 0x38: Interrupt Signal Enable (IE)
   struct Reg_int_signal_en : public Reg<Int_signal_en>
   {
-    using Reg::Reg;
+    using Reg<Int_signal_en>::Reg;
+    using Reg<Int_signal_en>::raw;
 
     CXX_BITFIELD_MEMBER(28, 28, dmaeien, raw);  ///< DMA error status IE
     CXX_BITFIELD_MEMBER(26, 26, tneien, raw);   ///< Tuning error IE
@@ -711,7 +737,8 @@ private:
   /// 0x3c: Auto CMD12 Error Status
   struct Reg_autocmd12_err_status : public Reg<Autocmd12_err_status>
   {
-    using Reg::Reg;
+    using Reg<Autocmd12_err_status>::Reg;
+    using Reg<Autocmd12_err_status>::raw;
 
     CXX_BITFIELD_MEMBER(23, 23, smp_clk_sel, raw);    ///< Sample clock select
     CXX_BITFIELD_MEMBER(22, 22, execute_tuning, raw); ///< Execute tuning
@@ -726,7 +753,8 @@ private:
   /// 0x3c: Control2 (iproc)
   struct Reg_host_ctrl2 : public Reg<Host_ctrl2>
   {
-    using Reg::Reg;
+    using Reg<Host_ctrl2>::Reg;
+    using Reg<Host_ctrl2>::raw;
 
     CXX_BITFIELD_MEMBER(31, 31, presvlen, raw);   ///< Preset value enable
     CXX_BITFIELD_MEMBER(30, 30, asyninten, raw);  ///< Asynchronous interrupt en
@@ -760,7 +788,8 @@ private:
   /// i.MX8 QM: 0x07f3b407.
   struct Reg_host_ctrl_cap : public Reg<Host_ctrl_cap>
   {
-    using Reg::Reg;
+    using Reg<Host_ctrl_cap>::Reg;
+    using Reg<Host_ctrl_cap>::raw;
 
     CXX_BITFIELD_MEMBER(28, 28, bit64_v3, raw); ///< 64-bit system address V3
     CXX_BITFIELD_MEMBER(27, 27, bit64_v4, raw); ///< 64-bit system address V4
@@ -800,7 +829,8 @@ private:
   /// 0x40: Host Controller Capabilities (SDHCI)
   struct Reg_cap1_sdhci : public Reg<Cap1_sdhci>
   {
-    using Reg::Reg;
+    using Reg<Cap1_sdhci>::Reg;
+    using Reg<Cap1_sdhci>::raw;
 
     CXX_BITFIELD_MEMBER(30, 31, slot_type, raw);
     CXX_BITFIELD_MEMBER(29, 29, async_int_support, raw);
@@ -823,7 +853,8 @@ private:
   /// 0x44: Watermark Level
   struct Reg_wtmk_lvl : public Reg<Wtmk_lvl>
   {
-    using Reg::Reg;
+    using Reg<Wtmk_lvl>::Reg;
+    using Reg<Wtmk_lvl>::raw;
 
     /// Write burst length due to system restriction
     CXX_BITFIELD_MEMBER(24, 28, wr_brst_len, raw);
@@ -843,7 +874,8 @@ private:
   /// 0x44: Host Controller Capabilities (SDHCI)
   struct Reg_cap2_sdhci : public Reg<Cap2_sdhci>
   {
-    using Reg::Reg;
+    using Reg<Cap2_sdhci>::Reg;
+    using Reg<Cap2_sdhci>::raw;
 
     CXX_BITFIELD_MEMBER(28, 28, vdd2_18_support, raw);
     CXX_BITFIELD_MEMBER(27, 27, adma2_support, raw);
@@ -869,7 +901,8 @@ private:
   /// 0x48: Mixer Control (uSDHC)
   struct Reg_mix_ctrl : public Reg<Mix_ctrl>
   {
-    using Reg::Reg;
+    using Reg<Mix_ctrl>::Reg;
+    using Reg<Mix_ctrl>::raw;
 
     CXX_BITFIELD_MEMBER(27, 27, en_hs400_mo, raw); ///< Enable enhanced HS400
     CXX_BITFIELD_MEMBER(26, 26, hs400_mo, raw);   ///< Enable HS400 mode
@@ -894,7 +927,8 @@ private:
   /// 0x48: Maximum Current Capabilities (SDHCI)
   struct Reg_max_current : public Reg<Max_current>
   {
-    using Reg::Reg;
+    using Reg<Max_current>::Reg;
+    using Reg<Max_current>::raw;
 
     CXX_BITFIELD_MEMBER(16, 23, max_current_18v_vdd1, raw);
     CXX_BITFIELD_MEMBER(8, 15, max_current_30v_vdd1, raw);
@@ -907,7 +941,8 @@ private:
   /// 0x4c: Maximum Current Capabilities, bits 32-63 (SDHCI)
   struct Reg_max_current2 : public Reg<Max_current2>
   {
-    using Reg::Reg;
+    using Reg<Max_current2>::Reg;
+    using Reg<Max_current2>::raw;
 
     CXX_BITFIELD_MEMBER(0, 7, max_current_18v_vdd2, raw);
   };
@@ -915,7 +950,8 @@ private:
   /// 0x54: ADMA Error status
   struct Reg_adma_err_status : public Reg<Adma_err_status>
   {
-    using Reg::Reg;
+    using Reg<Adma_err_status>::Reg;
+    using Reg<Adma_err_status>::raw;
 
     CXX_BITFIELD_MEMBER(3, 3, admadce, raw);
     CXX_BITFIELD_MEMBER(2, 2, adamlme, raw);
@@ -930,16 +966,19 @@ private:
   };
 
   /// 0x58: ADMA System Address (64-bit)
-  struct Reg_adma_sys_addr_lo : public Reg<Adma_sys_addr_lo> { using Reg::Reg; };
-  struct Reg_adma_sys_addr_hi : public Reg<Adma_sys_addr_hi> { using Reg::Reg; };
+  struct Reg_adma_sys_addr_lo : public Reg<Adma_sys_addr_lo>
+  { using Reg<Adma_sys_addr_lo>::Reg; };
+  struct Reg_adma_sys_addr_hi : public Reg<Adma_sys_addr_hi>
+  { using Reg<Adma_sys_addr_hi>::Reg; };
 
   /// 0x60: DLL (Delay Line) Control
-  struct Reg_dll_ctrl : public Reg<Dll_ctrl> { using Reg::Reg; };
+  struct Reg_dll_ctrl : public Reg<Dll_ctrl> { using Reg<Dll_ctrl>::Reg; };
 
   /// 0x68: CLK Tuning Control and Status
   struct Reg_clk_tune_ctrl_status : public Reg<Clk_tune_ctrl_status>
   {
-    using Reg::Reg;
+    using Reg<Clk_tune_ctrl_status>::Reg;
+    using Reg<Clk_tune_ctrl_status>::raw;
 
     CXX_BITFIELD_MEMBER(31, 31, pre_err, raw);
     CXX_BITFIELD_MEMBER(24, 30, tap_sel_pre, raw);
@@ -954,7 +993,8 @@ private:
   /// 0x70: Strobe DLL control
   struct Reg_strobe_dll_ctrl : public Reg<Strobe_dll_ctrl>
   {
-    using Reg::Reg;
+    using Reg<Strobe_dll_ctrl>::Reg;
+    using Reg<Strobe_dll_ctrl>::raw;
 
     CXX_BITFIELD_MEMBER(28, 31, strobe_dll_ctrl_ref_update_int, raw);
     CXX_BITFIELD_MEMBER(20, 27, strobe_dll_ctrl_slv_update_int, raw);
@@ -971,7 +1011,8 @@ private:
   /// 0x74: Strobe DLL status
   struct Reg_strobe_dll_status : public Reg<Strobe_dll_status>
   {
-    using Reg::Reg;
+    using Reg<Strobe_dll_status>::Reg;
+    using Reg<Strobe_dll_status>::raw;
 
     CXX_BITFIELD_MEMBER(9, 15, strobe_dll_sts_ref_sel, raw);
     CXX_BITFIELD_MEMBER(2, 8, strobe_dll_sts_slv_sel, raw);
@@ -982,7 +1023,8 @@ private:
   /// 0xc0: Vendor Specific
   struct Reg_vend_spec : public Reg<Vend_spec>
   {
-    using Reg::Reg;
+    using Reg<Vend_spec>::Reg;
+    using Reg<Vend_spec>::raw;
 
     // >>> uSDHC
     CXX_BITFIELD_MEMBER(31, 31, cmd_byte_en, raw); ///< Byte access
@@ -1002,12 +1044,13 @@ private:
   };
 
   /// 0xc4: MMC Boot
-  struct Reg_mmc_boot : public Reg<Mmc_boot> { using Reg::Reg; };
+  struct Reg_mmc_boot : public Reg<Mmc_boot> { using Reg<Mmc_boot>::Reg; };
 
   /// 0xc8: Vendor Specific 2 Register
   struct Reg_vend_spec2 : public Reg<Vend_spec2>
   {
-    using Reg::Reg;
+    using Reg<Vend_spec2>::Reg;
+    using Reg<Vend_spec2>::raw;
 
     CXX_BITFIELD_MEMBER(16, 31, fbclk_tap_sel, raw);
     CXX_BITFIELD_MEMBER(15, 15, en_32k_clk, raw);
@@ -1024,7 +1067,8 @@ private:
   /// 0xcc: Tuning Control
   struct Reg_tuning_ctrl : public Reg<Tuning_ctrl>
   {
-    using Reg::Reg;
+    using Reg<Tuning_ctrl>::Reg;
+    using Reg<Tuning_ctrl>::raw;
 
     CXX_BITFIELD_MEMBER(24, 24, std_tuning_en, raw);
     CXX_BITFIELD_MEMBER(20, 22, tuning_window, raw);
@@ -1038,7 +1082,8 @@ private:
   /// 0xfe: SDHCI: Host Controller Version Register
   struct Reg_host_version : public Reg<Host_version>
   {
-    using Reg::Reg;
+    using Reg<Host_version>::Reg;
+    using Reg<Host_version>::raw;
 
     CXX_BITFIELD_MEMBER(24, 31, vend_vers, raw); ///< Vendor version number.
     CXX_BITFIELD_MEMBER(16, 23, spec_vers, raw); ///< Spec version number.
@@ -1111,6 +1156,7 @@ private:
   {
     // need to use cxx::access_once() / cxx::write_now() to prevent the compiler
     // from merging access into an unaligned 64-bit access to word2 + word3
+    using Adma2_desc_32::word1;
     l4_uint32_t word2, word3;
     CXX_BITFIELD_MEMBER(0, 31, addr_hi, word2);
     void reset()
@@ -1134,15 +1180,15 @@ private:
   };
   static_assert(sizeof(Adma2_desc_64) == 16, "Size of Adma2_desc_64!");
 
-  static constexpr char const *type_name(Type t)
+  static constexpr char const *type_name()
   {
-    switch (t)
+    switch (TYPE)
       {
-      case Type::Sdhci:   return "SDHCI";
-      case Type::Usdhc:   return "uSDHC";
-      case Type::Iproc:   return "IProc";
-      case Type::Bcm2711: return "Bcm2711";
-      default:            return "<unknown type>";
+      case Sdhci_type::Plain:   return "SDHCI";
+      case Sdhci_type::Usdhc:   return "uSDHC";
+      case Sdhci_type::Iproc:   return "IProc";
+      case Sdhci_type::Bcm2711: return "Bcm2711";
+      default:      return "<unknown type>";
       }
   }
 
@@ -1150,7 +1196,7 @@ public:
   explicit Sdhci(int nr,
                  L4::Cap<L4Re::Dataspace> iocap,
                  L4::Cap<L4Re::Mmio_space> mmio_space,
-                 l4_uint64_t mmio_base, l4_uint64_t mmio_size, Type type,
+                 l4_uint64_t mmio_base, l4_uint64_t mmio_size,
                  L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
                  l4_uint32_t host_clock, Receive_irq receive_irq);
 
@@ -1158,9 +1204,6 @@ public:
 
   /** Initialize controller registers. */
   void init();
-
-  /** Bcm2711-specific initialization. */
-  void init_bcm2711(L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma);
 
   /** IRQ handler. */
   Cmd *handle_irq();
@@ -1181,29 +1224,28 @@ public:
   /** Set voltage (3.3V or 1.8V). */
   void set_voltage(Mmc::Voltage mmc_voltage);
 
+  void set_voltage_18(bool enable);
+
   /** Return true if any of the UHS timings is supported by the controller. */
   bool supp_uhs_timings(Mmc::Timing timing) const
   {
-    switch (_type)
+    if (TYPE == Sdhci_type::Usdhc)
       {
-      case Type::Usdhc:
-        {
-          Reg_host_ctrl_cap cc(this);
-          return    (timing & Mmc::Uhs_sdr12) // always supported
-                 || (timing & Mmc::Uhs_sdr25) // always supported
-                 || ((timing & Mmc::Uhs_sdr50) && cc.sdr50_support())
-                 || ((timing & Mmc::Uhs_sdr104) && cc.sdr104_support())
-                 || ((timing & Mmc::Uhs_ddr50) && cc.ddr50_support());
-        }
-      default:
-        {
-          Reg_cap2_sdhci c2(this);
-          return    (timing & Mmc::Uhs_sdr12) // always supported
-                 || (timing & Mmc::Uhs_sdr25) // always supported
-                 || ((timing & Mmc::Uhs_sdr50) && c2.sdr50_support())
-                 || ((timing & Mmc::Uhs_sdr104) && c2.sdr104_support())
-                 || ((timing & Mmc::Uhs_ddr50) && c2.ddr50_support());
-        }
+        Reg_host_ctrl_cap cc(this);
+        return    (timing & Mmc::Uhs_sdr12) // always supported
+               || (timing & Mmc::Uhs_sdr25) // always supported
+               || ((timing & Mmc::Uhs_sdr50) && cc.sdr50_support())
+               || ((timing & Mmc::Uhs_sdr104) && cc.sdr104_support())
+               || ((timing & Mmc::Uhs_ddr50) && cc.ddr50_support());
+      }
+    else
+      {
+        Reg_cap2_sdhci c2(this);
+        return    (timing & Mmc::Uhs_sdr12) // always supported
+               || (timing & Mmc::Uhs_sdr25) // always supported
+               || ((timing & Mmc::Uhs_sdr50) && c2.sdr50_support())
+               || ((timing & Mmc::Uhs_sdr104) && c2.sdr104_support())
+               || ((timing & Mmc::Uhs_ddr50) && c2.ddr50_support());
       }
   };
 
@@ -1229,10 +1271,10 @@ public:
   /** Return true if the card is busy. */
   constexpr bool card_busy() const
   {
-    switch (_type)
+    switch (TYPE)
       {
-      case Type::Iproc:
-      case Type::Bcm2711:
+      case Sdhci_type::Iproc:
+      case Sdhci_type::Bcm2711:
         return !Reg_pres_state(this).dat0lsl();
       default:
         return !Reg_pres_state(this).d0lsl();
@@ -1313,11 +1355,15 @@ private:
   void adma2_dump_descs(T const *desc) const;
   void adma2_dump_descs() const;
 
+  // ::::: Platform-specific :::::
+  void init_platform(L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma);
+  void done_platform();
+  // :::::::::::::::::::::::::::::
+
   Inout_buffer _adma2_desc_mem;         ///< Dataspace for descriptor memory.
   L4Re::Dma_space::Dma_addr _adma2_desc_phys; ///< Physical address of ADMA2 descs.
   Adma2_desc_64 *_adma2_desc;           ///< ADMA2 descriptor list (32/64-bit).
   l4_addr_t _dma_offset = 0;            ///< DMA offset (bcm2835)
-  Type _type;                           ///< The specific type of Sdhci.
   Bcm2835_mbox *bcm2835_mbox = nullptr; ///< For iproc: SoC control over mailbox
   bool _ddr_active = false;             ///< True if double-data timing.
   bool _adma2_64 = false;               ///< True if 64-bit ADMA2.
@@ -1347,7 +1393,6 @@ private:
 
   l4_uint32_t _write_delay = 0;
   l4_uint64_t _write_delay_last_reg_write = 0;
-
 }; // class Sdhci
 
 } // namespace Emmc

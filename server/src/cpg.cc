@@ -16,12 +16,15 @@ constexpr unsigned Rcar3_cpg::rmstpcr[Nr_modules];
 constexpr unsigned Rcar3_cpg::smstpcr[Nr_modules];
 constexpr unsigned Rcar3_cpg::mstpsr[Nr_modules];
 
-Dbg warn(Dbg::Warn, "cpg");
+static Dbg warn(Dbg::Warn, "cpg");
 
-Rcar3_cpg::Rcar3_cpg(L4::Cap<L4vbus::Vbus> vbus)
+Rcar3_cpg::Rcar3_cpg()
 {
   L4vbus::Pci_dev dev;
   l4vbus_device_t di;
+
+  auto vbus = L4Re::chkcap(L4Re::Env::env()->get_cap<L4vbus::Vbus>("vbus"),
+                           "Get 'vbus' capability.", -L4_ENOENT);
   auto root = vbus->root();
 
   while (root.next_device(&dev, L4VBUS_MAX_DEPTH, &di) == L4_EOK)

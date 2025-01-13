@@ -18,7 +18,7 @@
 class Rcar3_cpg
 {
 public:
-  Rcar3_cpg(L4::Cap<L4vbus::Vbus> vbus);
+  Rcar3_cpg();
   int enable_clock(unsigned n, unsigned bit);
   void enable_register(unsigned reg, unsigned value);
 

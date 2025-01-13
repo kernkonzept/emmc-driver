@@ -6,6 +6,8 @@
  * License: see LICENSE.spdx (in this directory or the directories above)
  */
 
+#pragma once
+
 #include <l4/re/mmio_space>
 #include <l4/sys/kip.h>
 
@@ -43,10 +45,9 @@ Device<Driver>::Device(int nr, l4_uint64_t mmio_addr, l4_uint64_t mmio_size,
                        int irq_num, L4_irq_mode irq_mode, L4::Cap<L4::Icu> icu,
                        L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
                        L4Re::Util::Object_registry *registry,
-                       typename Driver::Type type,
                        l4_uint32_t host_clock, int max_seg,
                        Device_type_disable dt_disable)
-: _drv(nr, iocap, mmio_space, mmio_addr, mmio_size, type, dma, host_clock,
+: _drv(nr, iocap, mmio_space, mmio_addr, mmio_size, dma, host_clock,
        [this](bool is_data) { receive_irq(is_data); }),
   _irq_num(irq_num),
   _irq_mode(irq_mode),

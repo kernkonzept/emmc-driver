@@ -126,7 +126,6 @@ public:
          int irq_num, L4_irq_mode irq_mode, L4::Cap<L4::Icu> icu,
          L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
          L4Re::Util::Object_registry *registry,
-         typename Driver::Type type,
          l4_uint32_t host_clock, int max_seg,
          Device_type_disable dt_disable);
 
@@ -378,4 +377,4 @@ struct Dma_info : public Block_device::Dma_region_info
 
 } // namespace Emmc
 
-#include "device_impl.h"
+#include "device-impl.h"

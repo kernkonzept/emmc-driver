@@ -16,14 +16,6 @@ class Sdhi : public Drv<Sdhi>
   friend Drv;
 
 public:
-  // This enum does not carry any information, as there is only one possible
-  // value. Its purpose is just to keep the interfaces between this class and
-  // Emmc::Sdhci consistent.
-  enum class Type
-  {
-    Sdhi,  ///< Sdhi driver
-  };
-
   static bool dma_adma2() { return false; }
   static bool auto_cmd12() { return false; }
   static bool auto_cmd23() { return false; }
@@ -35,7 +27,7 @@ public:
   explicit Sdhi(int nr,
                 L4::Cap<L4Re::Dataspace> iocap,
                 L4::Cap<L4Re::Mmio_space> mmio_space,
-                l4_uint64_t mmio_base, l4_uint64_t mmio_size, Type,
+                l4_uint64_t mmio_base, l4_uint64_t mmio_size,
                 L4Re::Util::Shared_cap<L4Re::Dma_space> const &,
                 l4_uint32_t, Receive_irq receive_irq);
 
