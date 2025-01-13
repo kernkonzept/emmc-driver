@@ -95,8 +95,9 @@ Device<Driver>::Device(int nr, l4_uint64_t mmio_addr, l4_uint64_t mmio_size,
 
   claim_bounce_buffer("bbds");
 
-  info.printf("\033[33mMax request size %s.\033[m\n",
-              Util::readable_size(max_size()).c_str());
+  info.printf("\033[33mMax request size %s%s.\033[m\n",
+              Util::readable_size(max_size()).c_str(),
+              max_size() < Max_size ? " (limited by bounce buffer / max_seg)" : "");
 }
 
 template <class Driver>
@@ -148,7 +149,7 @@ Device<Driver>::claim_bounce_buffer(char const *cap_name)
                           "Bounce buffer at %08llx-%08llx not accessible by DMA",
                           phys, phys + size);
 
-  warn.printf("\033[31;1mUsing bounce buffer of %s @ %08llx if required.[m\n",
+  warn.printf("\033[31;1mUsing bounce buffer of %s @ %08llx if required.\033[m\n",
               Util::readable_size(size).c_str(), phys);
 }
 
