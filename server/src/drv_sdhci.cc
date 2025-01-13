@@ -9,7 +9,7 @@
  * \file backend for SDHCI used by i.MX8.
  */
 
-#include <l4/mbox/mbox.h>
+#include <l4/mbox-bcm2835/mbox.h>
 #include <l4/sys/cache.h>
 
 #include "cmd.h"
