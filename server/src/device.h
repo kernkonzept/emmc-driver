@@ -29,6 +29,12 @@ namespace Emmc {
 template <class Driver>
 struct Dma_info;
 
+struct Device_type_disable
+{
+  Mmc::Reg_ecsd::Ec196_device_type mmc{0};
+  unsigned sd{0};
+};
+
 class Base_device
 : public Block_device::Device,
   public Block_device::Device_discard_feature
@@ -122,7 +128,7 @@ public:
          L4Re::Util::Object_registry *registry,
          typename Driver::Type type,
          l4_uint32_t host_clock, int max_seg,
-         Mmc::Reg_ecsd::Ec196_device_type dt_disable);
+         Device_type_disable dt_disable);
 
   void handle_irq();
 
@@ -324,7 +330,7 @@ private:
   Dbg trace2;
 
   /// Mask for bits in device_type which should be ignored.
-  Mmc::Reg_ecsd::Ec196_device_type _device_type_disable;
+  Device_type_disable _device_type_disable;
 
   constexpr char const *yes_no(unsigned bit) { return bit ? "yes" : "no"; }
   constexpr char const *yes_na(unsigned bit) { return bit ? "yes" : "N/A"; }

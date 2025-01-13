@@ -29,7 +29,7 @@ static Dbg warn(Dbg::Warn, "main");
 static Dbg info(Dbg::Info, "main");
 static Dbg trace(Dbg::Trace, "main");
 
-static Emmc::Mmc::Reg_ecsd::Ec196_device_type device_type_disable(0);
+static Emmc::Device_type_disable device_type_disable;
 static int max_seg = 64;
 
 // Don't specify the partition number when creating a client. The partition is
@@ -346,25 +346,41 @@ parse_args(int argc, char *const *argv)
           debug_level = 0;
           break;
         case OPT_DISABLE_MODE:
+          // ==================
+          // === eMMC modes ===
+          // ==================
           if (!strcmp(optarg, "hs26"))
-            device_type_disable.hs26() = 1;
+            device_type_disable.mmc.hs26() = 1;
           else if (!strcmp(optarg, "hs52"))
-            device_type_disable.hs52() = 1;
+            device_type_disable.mmc.hs52() = 1;
           else if (!strcmp(optarg, "hs52_ddr"))
             {
-              device_type_disable.hs52_ddr_18() = 1;
-              device_type_disable.hs52_ddr_12() = 1;
+              device_type_disable.mmc.hs52_ddr_18() = 1;
+              device_type_disable.mmc.hs52_ddr_12() = 1;
             }
           else if (!strcmp(optarg, "hs200"))
             {
-              device_type_disable.hs200_sdr_18() = 1;
-              device_type_disable.hs200_sdr_12() = 1;
+              device_type_disable.mmc.hs200_sdr_18() = 1;
+              device_type_disable.mmc.hs200_sdr_12() = 1;
             }
           else if (!strcmp(optarg, "hs400"))
             {
-              device_type_disable.hs400_ddr_18() = 1;
-              device_type_disable.hs400_ddr_12() = 1;
+              device_type_disable.mmc.hs400_ddr_18() = 1;
+              device_type_disable.mmc.hs400_ddr_12() = 1;
             }
+          // =====================
+          // === SD card modes ===
+          // =====================
+          else if (!strcmp(optarg, "sdr12"))
+            device_type_disable.sd |= Emmc::Mmc::Timing::Uhs_sdr12;
+          else if (!strcmp(optarg, "sdr25"))
+            device_type_disable.sd |= Emmc::Mmc::Timing::Uhs_sdr25;
+          else if (!strcmp(optarg, "sdr50"))
+            device_type_disable.sd |= Emmc::Mmc::Timing::Uhs_sdr50;
+          else if (!strcmp(optarg, "sdr104"))
+            device_type_disable.sd |= Emmc::Mmc::Timing::Uhs_sdr104;
+          else if (!strcmp(optarg, "ddr50"))
+            device_type_disable.sd |= Emmc::Mmc::Timing::Uhs_ddr50;
           else
             {
               warn.printf("Invalid parameter\n\n");

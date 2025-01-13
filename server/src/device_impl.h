@@ -45,7 +45,7 @@ Device<Driver>::Device(int nr, l4_uint64_t mmio_addr, l4_uint64_t mmio_size,
                        L4Re::Util::Object_registry *registry,
                        typename Driver::Type type,
                        l4_uint32_t host_clock, int max_seg,
-                       Mmc::Reg_ecsd::Ec196_device_type dt_disable)
+                       Device_type_disable dt_disable)
 : _drv(nr, iocap, mmio_space, mmio_addr, mmio_size, type, dma, host_clock,
        [this](bool is_data) { receive_irq(is_data); }),
   _irq_num(irq_num),
@@ -1197,31 +1197,36 @@ Device<Driver>::power_up_sd(Cmd *cmd)
       _drv.delay(5);
     }
 
-  if (v18 && _drv.supp_uhs_timings(Mmc::Uhs_sdr104) && sf.acc_mode_sdr104())
+  if (v18 && _drv.supp_uhs_timings(Mmc::Uhs_sdr104) && sf.acc_mode_sdr104()
+      && !(_device_type_disable.sd & Mmc::Uhs_sdr104))
     {
       mmc_timing = Mmc::Uhs_sdr104;
       a6_timing = Mmc::Arg_cmd6_switch_func::Grp1_sdr104;
       freq = 200 * MHz;
     }
-  else if (v18 && _drv.supp_uhs_timings(Mmc::Uhs_ddr50) && sf.acc_mode_ddr50())
+  else if (v18 && _drv.supp_uhs_timings(Mmc::Uhs_ddr50) && sf.acc_mode_ddr50()
+           && !(_device_type_disable.sd & Mmc::Uhs_ddr50))
     {
       mmc_timing = Mmc::Uhs_ddr50;
       a6_timing = Mmc::Arg_cmd6_switch_func::Grp1_ddr50;
       freq = 50 * MHz;
     }
-  else if (v18 && _drv.supp_uhs_timings(Mmc::Uhs_sdr50) && sf.acc_mode_sdr50())
+  else if (v18 && _drv.supp_uhs_timings(Mmc::Uhs_sdr50) && sf.acc_mode_sdr50()
+           && !(_device_type_disable.sd & Mmc::Uhs_sdr50))
     {
       mmc_timing = Mmc::Uhs_sdr50;
       a6_timing = Mmc::Arg_cmd6_switch_func::Grp1_sdr50;
       freq = 100 * MHz;
     }
-  else if (_drv.supp_uhs_timings(Mmc::Uhs_sdr25) && sf.acc_mode_sdr25())
+  else if (_drv.supp_uhs_timings(Mmc::Uhs_sdr25) && sf.acc_mode_sdr25()
+           && !(_device_type_disable.sd & Mmc::Uhs_sdr25))
     {
       mmc_timing = Mmc::Uhs_sdr25;
       a6_timing = Mmc::Arg_cmd6_switch_func::Grp1_sdr25;
       freq = 50 * MHz;
     }
-  else if (_drv.supp_uhs_timings(Mmc::Uhs_sdr12) && sf.acc_mode_sdr12())
+  else if (_drv.supp_uhs_timings(Mmc::Uhs_sdr12) && sf.acc_mode_sdr12()
+           && !(_device_type_disable.sd & Mmc::Uhs_sdr12))
     {
       mmc_timing = Mmc::Uhs_sdr12;
       a6_timing = Mmc::Arg_cmd6_switch_func::Grp1_sdr12;
@@ -1438,7 +1443,7 @@ Device<Driver>::power_up_mmc(Cmd *cmd)
   _enh_strobe = _ecsd.ec184_strobe_support;
 
   // disable certain modes for testing
-  _device_type_restricted.disable(_device_type_disable);
+  _device_type_restricted.disable(_device_type_disable.mmc);
 
   info.printf("Following device types supported (%02x, strobe=%d):\n",
               _device_type_restricted.raw, _enh_strobe);

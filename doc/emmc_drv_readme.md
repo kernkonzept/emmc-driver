@@ -54,8 +54,11 @@ command line options:
 
 * `--disable-mode <mode>`
 
-  This option allows to disable certain eMMC modes from autodetection. The
-  modes `hs26`, `hs52`, `hs52_ddr`, `hs200`, and `hs400` are determined.
+  This option allows to disable certain eMMC/SD card modes from autodetection.
+  The modes `hs26`, `hs52`, `hs52_ddr`, `hs200`, and `hs400` are determined for
+  eMMC devices. The modes `sdr12`, `sdr25`, `sdr50`, `sdr104`, `ddr50` are
+  determined for SD card devices.
+  This option can be specified multiple times to disable multiple modes.
 
 * `--max-seg <number>`
 
