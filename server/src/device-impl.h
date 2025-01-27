@@ -195,7 +195,7 @@ Device<Driver>::dma_map_all(Block_device::Mem_region *region, l4_addr_t offset,
       if (ret < 0 || size < num_sectors * sector_size())
         {
           *phys = 0;
-          warn.printf("Cannot resolve physical address (ret = %ld, %zu < %zu).\n",
+          warn.printf("Cannot resolve physical address (ret = %d, %zu < %zu).\n",
                       ret, size, num_sectors * sector_size());
           return -L4_ENOMEM;
         }
@@ -245,7 +245,7 @@ Device<Driver>::dma_map_single(Block_device::Mem_region *region, l4_addr_t offse
   if (ret < 0 || ds_size < num_sectors * sector_size())
     {
       *phys = 0;
-      warn.printf("Cannot resolve physical address (ret = %ld, %zu < %zu).\n",
+      warn.printf("Cannot resolve physical address (ret = %d, %zu < %zu).\n",
                   ret, ds_size, num_sectors * sector_size());
       return -L4_ENOMEM;
     }
@@ -282,7 +282,7 @@ Device<Driver>::dma_unmap_region(Dma_info<Driver> *dma_info)
                          L4Re::Dma_space::Attributes::None,
                          L4Re::Dma_space::Direction::Bidirectional);
   if (ret < 0)
-    Dbg::info().printf("Failed to unmap (ret = %ld, addr = %llx, size = %zu)\n",
+    Dbg::info().printf("Failed to unmap (ret = %d, addr = %llx, size = %zu)\n",
                        ret, dma_info->addr, dma_info->size);
 }
 
