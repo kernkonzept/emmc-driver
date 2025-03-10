@@ -64,6 +64,7 @@ command line options:
 
   Maximum number of segments per request. This number is announced to the virtio
   interface and is also relevant for the required bounce buffer size, see below.
+  Default is 64.
 
 * `--client <cap_name>`
 
@@ -154,7 +155,8 @@ The driver makes use of certain capabilities:
   certain request needs it.  
   **Note:** The bounce buffer needs to be able to hold the memory for an entire
   read/write request. That means that the buffer is divided into the number of
-  maximum segments (see `--max-seg` parameter).
+  maximum segments (see `--max-seg` parameter). 
+  **Note:** The physical memory of the provided dataspace must be contiguous.
 
 * `sdhci_adma_buf`
 
