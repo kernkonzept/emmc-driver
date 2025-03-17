@@ -23,7 +23,7 @@ local mem_flags = L4.Mem_alloc_flags.Continuous
 -- WARNING: There will be weird -5 errors if the virtio client uses a request
 --          with a buffer size bigger than the bounce buffer. The driver
 --          announces max_size() = sizeof("bbds" dataspace) so the client
---          has to follow the virtio-contstaints.
+--          has to follow the virtio-constraints.
 local bbds = ft:create(L4.Proto.Dataspace, 128 << 10, mem_flags, 21):m("rws")
 
 ldr:start(
