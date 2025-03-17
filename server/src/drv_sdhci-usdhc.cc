@@ -52,6 +52,7 @@ struct F_sdhci_usdhc : Factory
       case 0x5b010000: return 396000000;
       case 0x5b020000: return 198000000;
       case 0x5b030000: return 198000000;
+      case 0x402f0000: return 400000000; // s32g2-usdhc
       default:
         L4Re::throw_error(-L4_EINVAL, "Unknown host clock");
       }
@@ -62,5 +63,7 @@ static F_sdhci_usdhc f_sdhci_usdhc;
 static Device_type_nopci t_sdhci_usdhc_a{"fsl,imx8mq-usdhc", &f_sdhci_usdhc};
 static Device_type_nopci t_sdhci_usdhc_b{"fsl,imx8qm-usdhc", &f_sdhci_usdhc};
 static Device_type_nopci t_sdhci_usdhc_c{"fsl,imx7d-usdhc", &f_sdhci_usdhc};
+static Device_type_nopci t_sdhci_usdhc_d{"fsl,s32gen1-usdhc", &f_sdhci_usdhc};
+static Device_type_nopci t_sdhci_usdhc_e{"nxp,s32g2-usdhc", &f_sdhci_usdhc};
 
 } // namespace
