@@ -44,7 +44,7 @@ ldr:start(
     emmc   = io_bus:svr(),
     icu    = L4.Env.icu,
     iommu  = L4.Env.iommu,
-    sigma0 = L4.cast(L4.Proto.Factory, L4.Env.sigma0):create(L4.Proto.Sigma0),
+    sigma0 = L4.Proto.Sigma0,
     platform_ctl = platform_ctl:svr()
   },
   log = { "io", "red" },
