@@ -28,19 +28,19 @@ public:
     Trace2 = 8
   };
 
-  Dbg(unsigned long l = Info, char const *subsys = "", int nr = -1)
+  Dbg(unsigned long l = Info, char const *subsys = nullptr, int nr = -1)
   : L4Re::Util::Dbg(l, create_comp_str("eMMC", nr), subsys) {}
 
-  static Dbg warn(char const *subsys = "")
+  static Dbg warn(char const *subsys = nullptr)
   { return Dbg(Dbg::Warn, subsys); }
 
-  static Dbg info(char const *subsys = "")
+  static Dbg info(char const *subsys = nullptr)
   { return Dbg(Dbg::Info, subsys); }
 
-  static Dbg trace(char const *subsys = "")
+  static Dbg trace(char const *subsys = nullptr)
   { return Dbg(Dbg::Trace, subsys); }
 
-  static Dbg trace2(char const *subsys = "")
+  static Dbg trace2(char const *subsys = nullptr)
   { return Dbg(Dbg::Trace2, subsys); }
 
 private:
