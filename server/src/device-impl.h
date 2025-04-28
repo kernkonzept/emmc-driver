@@ -182,22 +182,23 @@ Device<Driver>::dma_map_all(Block_device::Mem_region *region, l4_addr_t offset,
 {
   if (!region->dma_info)
     {
-      l4_size_t ds_size = region->ds()->size();
+      l4_size_t size = region->size();
       L4Re::Dma_space::Dma_addr addr;
-      auto ret = _dma->map(L4::Ipc::make_cap_rw(region->ds()), 0,
-                           &ds_size, L4Re::Dma_space::Attributes::None,
-                           L4Re::Dma_space::Direction::Bidirectional, &addr);
-      if (ret < 0 || ds_size < num_sectors * sector_size())
+      auto ret =
+        _dma->map(L4::Ipc::make_cap_rw(region->ds()), region->ds_offset(),
+                  &size, L4Re::Dma_space::Attributes::None,
+                  L4Re::Dma_space::Direction::Bidirectional, &addr);
+      if (ret < 0 || size < num_sectors * sector_size())
         {
           *phys = 0;
           warn.printf("Cannot resolve physical address (ret = %ld, %zu < %zu).\n",
-                      ret, ds_size, num_sectors * sector_size());
+                      ret, size, num_sectors * sector_size());
           return -L4_ENOMEM;
         }
 
       auto device = cxx::Ref_ptr<Block_device::Device>(this);
       auto dma_info =
-        cxx::make_unique<Emmc::Dma_info<Driver>>(addr, ds_size, device);
+        cxx::make_unique<Emmc::Dma_info<Driver>>(addr, size, device);
       region->dma_info =
         cxx::unique_ptr<Block_device::Dma_region_info>(dma_info.release());
     }
