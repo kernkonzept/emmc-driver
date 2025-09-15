@@ -8,6 +8,8 @@
 #pragma once
 
 #include <l4/cxx/bitfield>
+#include <l4/sys/types.h>
+
 #include <string>
 
 namespace Emmc {
