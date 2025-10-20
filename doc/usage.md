@@ -137,10 +137,20 @@ line options:
 
   This parameter opens a scope for the following subparameters:
 
-  * `--device <UUID>`
+  * `--device <<PSN> | <PSN>:<PARTNUM> | [partuuid:]<UUID> |
+  [partlabel:]<LABEL>>`
 
-    This option denotes the partition UUID of the partition to be exported for
-    the client specified in the preceding `client` option.
+    This option denotes either the eMMC device, or a partition on such a device
+    to be exported for the client specified in the preceding `client` option.
+
+    The eMMC device is specified via its PSN (Product Serial Number). The PSN
+    can be found e.g. in the eMMC server's output or in the device's sysfs
+    directory in Linux.
+
+    The partition can be given either by the combination of the device's PSN
+    followed by a colon followed by the partition number PARTNUM, or by the
+    partition's UUID or label. Both 'partuuid:' and 'partlabel:' strings are
+    optional and help to disambiguate the device matching if necessary.
 
     String value.
 
@@ -183,13 +193,23 @@ Prior to connecting a client to a virtual block session it has to be created
 using the following Lua function. It has to be called on the client side of the
 IPC gate capability whose server side is bound to the eMMC driver.
 
-Call:   `create(0, "device=<UUID>" [, "ds-max=<max>", "readonly", "dma-map-all",
-"dma-map-per-req"])`
+Call:   `create(0, "device=<<PSN> | <PSN>:<PARTNUM> | [partuuid:]<UUID> |
+[partlabel:]<LABEL>>" [, "ds-max=<max>", "readonly", "dma-map-all", "dma-map-
+per-req"])`
 
-* `"device=<UUID>"`
+* `"device=<<PSN> | <PSN>:<PARTNUM> | [partuuid:]<UUID> | [partlabel:]<LABEL>>"`
 
-  This string denotes a partition UUID the client wants to be exported via the
-  Virtio block interface.
+  This string denotes either the eMMC device, or a partition on such a device
+  that the client wants to be exported via the Virtio block interface.
+
+  The eMMC device is specified via its PSN (Product Serial Number). The PSN can
+  be found e.g. in the eMMC server's output or in the device's sysfs directory
+  in Linux.
+
+  The partition can be given either by the combination of the device's PSN
+  followed by a colon followed by the partition number PARTNUM, or by the
+  partition's UUID or label. Both 'partuuid:' and 'partlabel:' strings are
+  optional and help to disambiguate the device matching if necessary.
 
   String value.
 
@@ -238,10 +258,47 @@ eMMC driver using the Virtio block protocol.
 A couple of examples on how to request different disks or partitions are listed
 below.
 
+* Request the whole eMMC device
+
+Assume the eMMC server reported the following PSN number (running in QEMU):
+
+```
+eMMC-0[device]: product: 'QEMU!', manufactured 2/2006, mid=aa, psn=deadbeef
+```
+
+A client can connect to this disk via:
+
+```lua
+vda1 = emmc_bus:create(0, "ds-max=5", "device=deadbeef"
+```
+
+* Request a partition using a partition number
+
+Assume the eMMC server reported the following PSN number (running in QEMU):
+
+```
+eMMC-0[device]: product: 'QEMU!', manufactured 2/2006, mid=aa, psn=deadbeef
+```
+
+A client can connect to partition 2 on this device like this:
+
+```lua
+vda1 = emmc_bus:create(0, "ds-max=5", "device=deadbeef:2"
+```
+
 * Request a partition with the given UUID
 
 ```lua
-vda1 = emmc_bus:create(0, "ds-max=5", "device=AFFA05B0-9379-480E-B9C6-5FF57FB1D194")
+vda1 = emmc_bus:create(0, "ds-max=5", "device=partuuid:AFFA05B0-9379-480E-B9C6-5FF57FB1D194")
+```
+
+* Request a partition using a label
+
+Assume there is a partition with label 'foobar'. A client can connect to it
+using the following snippet:
+
+```lua
+vda1 = emmc_bus:create(0, "ds-max=5", "device=partlabel:foobar")
 ```
 
 * A more elaborate example with a static client. The client uses the client side
