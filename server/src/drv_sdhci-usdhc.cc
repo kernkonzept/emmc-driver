@@ -65,5 +65,6 @@ static Device_type_nopci t_sdhci_usdhc_b{"fsl,imx8qm-usdhc", &f_sdhci_usdhc};
 static Device_type_nopci t_sdhci_usdhc_c{"fsl,imx7d-usdhc", &f_sdhci_usdhc};
 static Device_type_nopci t_sdhci_usdhc_d{"fsl,s32gen1-usdhc", &f_sdhci_usdhc};
 static Device_type_nopci t_sdhci_usdhc_e{"nxp,s32g2-usdhc", &f_sdhci_usdhc};
+static Device_type_nopci t_sdhci_usdhc_f{"nxp,s32cc-usdhc", &f_sdhci_usdhc};
 
 } // namespace
