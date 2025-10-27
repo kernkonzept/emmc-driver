@@ -53,7 +53,8 @@ static char const *usage_str =
 " --ds-max NUM         Specify maximum number of dataspaces the client can register\n"
 " --max-seg NUM        Specify maximum number of segments one vio request can have\n"
 " --readonly           Only allow read-only access to the device\n"
-" --dma-map-all        Map the entire client dataspace permanently\n";
+" --dma-map-all        Map the entire client dataspace permanently (default)\n"
+" --dma-map-per-req    Map/unmap client dataspace per request\n";
 
 class Blk_mgr
 : public Emmc::Base_device_mgr,
@@ -89,7 +90,7 @@ public:
     std::string device;
     int num_ds = 2;
     bool readonly = false;
-    bool dma_map_all = false;
+    bool dma_map_all = true;
 
     for (L4::Ipc::Varg p: valist)
       {
@@ -117,8 +118,8 @@ public:
           }
         else if (strncmp(p.value<char const *>(), "readonly", p.length()) == 0)
           readonly = true;
-        else if (strncmp(p.value<char const *>(), "dma-map-all", p.length()) == 0)
-          dma_map_all = true;
+        else if (strncmp(p.value<char const *>(), "dma-map-per-req", p.length()) == 0)
+          dma_map_all = false;
       }
 
     if (device.empty())
@@ -132,7 +133,7 @@ public:
                                     [dma_map_all, device](Emmc::Base_device *b)
       {
         Dbg(Dbg::Warn).printf("%s for device '%s'.\033[m\n",
-                              dma_map_all ? "\033[31;1mDMA-map-all enabled"
+                              dma_map_all ? "\033[31;1mDMA-map-all enabled (default)"
                                           : "\033[32mDMA-map-all disabled",
                               device.c_str());
         if (auto *pd = dynamic_cast<Emmc::Part_device *>(b))
@@ -232,7 +233,7 @@ struct Client_opts
                                    [dev, map_all](Emmc::Base_device *b)
          {
            Dbg(Dbg::Warn).printf("%s for device '%s'\033[m\n",
-                                 map_all ? "\033[31;1mDMA-map-all enabled"
+                                 map_all ? "\033[31;1mDMA-map-all enabled (default)"
                                          : "\033[32mDMA-map-all disabled",
                                  dev.c_str());
            if (auto *pd = dynamic_cast<Emmc::Part_device *>(b))
@@ -249,7 +250,7 @@ struct Client_opts
   std::string device;
   int ds_max = 2;
   bool readonly = false;
-  bool dma_map_all = false;
+  bool dma_map_all = true;
 };
 
 static Block_device::Errand::Errand_server server;
@@ -271,6 +272,7 @@ parse_args(int argc, char *const *argv)
     OPT_DS_MAX,
     OPT_READONLY,
     OPT_DMA_MAP_ALL,
+    OPT_DMA_MAP_PER_REQ,
     OPT_DISABLE_MODE,
   };
 
@@ -283,12 +285,13 @@ parse_args(int argc, char *const *argv)
     { "max-seg",        required_argument,      NULL,   OPT_MAX_SEG },
 
     // per-client options
-    { "client",         required_argument,      NULL,   OPT_CLIENT },
-    { "device",         required_argument,      NULL,   OPT_DEVICE },
-    { "ds-max",         required_argument,      NULL,   OPT_DS_MAX },
-    { "readonly",       no_argument,            NULL,   OPT_READONLY },
-    { "dma-map-all",    no_argument,            NULL,   OPT_DMA_MAP_ALL },
-    { 0,                0,                      NULL,   0, },
+    { "client",          required_argument,      NULL,   OPT_CLIENT },
+    { "device",          required_argument,      NULL,   OPT_DEVICE },
+    { "ds-max",          required_argument,      NULL,   OPT_DS_MAX },
+    { "readonly",        no_argument,            NULL,   OPT_READONLY },
+    { "dma-map-all",     no_argument,            NULL,   OPT_DMA_MAP_ALL },
+    { "dma-map-per-req", no_argument,            NULL,   OPT_DMA_MAP_PER_REQ },
+    { 0,                 0,                      NULL,   0, },
   };
 
   Client_opts opts;
@@ -382,6 +385,9 @@ parse_args(int argc, char *const *argv)
           break;
         case OPT_DMA_MAP_ALL:
           opts.dma_map_all = true;
+          break;
+        case OPT_DMA_MAP_PER_REQ:
+          opts.dma_map_all = false;
           break;
         default:
           warn.printf(usage_str, argv[0]);

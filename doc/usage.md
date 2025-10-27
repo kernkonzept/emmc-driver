@@ -163,9 +163,17 @@ line options:
   * `--dma-map-all`
 
     Map the entire client dataspace into the DMA space at the first I/O request
-    and never unmap the dataspace until the client is destroyed. The default
-    behavior is to map the relevant part of the dataspace before an I/O request
-    and unmap it after the request.
+    and never unmap the dataspace until the client is destroyed. This is the
+    default behavior.
+
+    Flag. True if provided.
+
+  * `--dma-map-per-req`
+
+    By default, the entire client dataspace is mapped into the DMA space at the
+    first I/O request and the dataspace is never unmapped until the client is
+    destroyed. Change the default behavior by mapping the relevant part of the
+    dataspace before an I/O request and unmapping it after the request.
 
     Flag. True if provided.
 
@@ -175,8 +183,8 @@ Prior to connecting a client to a virtual block session it has to be created
 using the following Lua function. It has to be called on the client side of the
 IPC gate capability whose server side is bound to the eMMC driver.
 
-Call:   `create(0, "device=<UUID>" [, "ds-max=<max>", "readonly", "dma-map-
-all"])`
+Call:   `create(0, "device=<UUID>" [, "ds-max=<max>", "readonly", "dma-map-all",
+"dma-map-per-req"])`
 
 * `"device=<UUID>"`
 
@@ -205,9 +213,17 @@ all"])`
 * `"dma-map-all"`
 
   Map the entire client dataspace into the DMA space at the first I/O request
-  and never unmap the dataspace until the client is destroyed. The default
-  behavior is to map the relevant part of the dataspace before an I/O request
-  and unmap it after the request.
+  and never unmap the dataspace until the client is destroyed. This is the
+  default behavior.
+
+  Flag. True if provided.
+
+* `"dma-map-per-req"`
+
+  By default, the entire client dataspace is mapped into the DMA space at the
+  first I/O request and the dataspace is never unmapped until the client is
+  destroyed. Change the default behavior by mapping the relevant part of the
+  dataspace before an I/O request and unmapping it after the request.
 
   Flag. True if provided.
 

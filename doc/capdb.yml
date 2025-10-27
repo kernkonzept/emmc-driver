@@ -107,8 +107,15 @@ cmds:
         desc: |
           Map the entire client dataspace into the DMA space at the first I/O
           request and never unmap the dataspace until the client is destroyed.
-          The default behavior is to map the relevant part of the dataspace
-          before an I/O request and unmap it after the request.
+          This is the default behavior.
+        type: flag
+      - name: 'dma-map-per-req'
+        desc: |
+          By default, the entire client dataspace is mapped into the DMA space
+          at the first I/O request and the dataspace is never unmapped until
+          the client is destroyed. Change the default behavior by mapping the
+          relevant part of the dataspace before an I/O request and unmapping it
+          after the request.
         type: flag
 caps:
   - name: 'vbus'
@@ -191,8 +198,15 @@ factory:
         desc: |
           Map the entire client dataspace into the DMA space at the first I/O
           request and never unmap the dataspace until the client is destroyed.
-          The default behavior is to map the relevant part of the dataspace
-          before an I/O request and unmap it after the request.
+          This is the default behavior.
+        type: flag
+      - name: 'dma-map-per-req'
+        desc: |
+          By default, the entire client dataspace is mapped into the DMA space
+          at the first I/O request and the dataspace is never unmapped until
+          the client is destroyed. Change the default behavior by mapping the
+          relevant part of the dataspace before an I/O request and unmapping it
+          after the request.
         type: flag
 examples: |
   A couple of examples on how to request different disks or partitions are
