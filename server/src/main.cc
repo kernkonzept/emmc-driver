@@ -261,7 +261,7 @@ static unsigned devices_found = 0;
 static int
 parse_args(int argc, char *const *argv)
 {
-  int debug_level = 1;
+  int debug_level = Dbg::Warn;
 
   enum
   {
