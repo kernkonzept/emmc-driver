@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <cstdio>
+
 #include <l4/re/mmio_space>
 #include <l4/sys/kip.h>
 
@@ -1093,9 +1095,11 @@ Device<Driver>::power_up_sd(Cmd *cmd)
   cmd->check_error("CMD2: ALL_SEND_CID");
 
   Mmc::Reg_cid cid(cmd->resp);
-  info.printf("product: '%s', manufactured %d/%d, mid=%02x, psn=%08x\n",
-              readable_product(cid.sd.pnm()).c_str(), cid.sd.mmth(),
-              cid.sd.myr(), cid.sd.mid().get(), cid.sd.psn());
+  // Also with NDEBUG: The PSN is important because it can be used to address
+  //                   the device.
+  printf("product: '%s', manufactured %d/%d, mid=%02x, psn=%08x\n",
+         readable_product(cid.sd.pnm()).c_str(), cid.sd.mmth(),
+         cid.sd.myr(), cid.sd.mid().get(), cid.sd.psn());
 
   // Use the PSN as identifier for the whole device. The method `match_hid()`
   // will match for this string.
@@ -1410,9 +1414,11 @@ Device<Driver>::power_up_mmc(Cmd *cmd)
   cmd->check_error("CMD2: ALL_SEND_CID");
 
   Mmc::Reg_cid cid(cmd->resp);
-  info.printf("product: '%s', manufactured %d/%d, mid = %02x, psn = %08x\n",
-              readable_product(cid.mmc.pnm()).c_str(), cid.mmc.mmth(),
-              cid.mmc.myr(), cid.mmc.mid().get(), cid.mmc.psn());
+  // Also with NDEBUG: The PSN is important because it can be used to address
+  //                   the device.
+  printf("product: '%s', manufactured %d/%d, mid = %02x, psn = %08x\n",
+         readable_product(cid.mmc.pnm()).c_str(), cid.mmc.mmth(),
+         cid.mmc.myr(), cid.mmc.mid().get(), cid.mmc.psn());
 
   // Use the PSN as identifier for the whole device. The method `match_hid()`
   // will match for this string.
