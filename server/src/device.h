@@ -278,6 +278,7 @@ private:
 
   void show_statistics();
   void show_csd(Mmc::Reg_csd const &csd);
+  static l4_uint64_t device_size(Mmc::Reg_csd const &csd);
   static std::string readable_product(std::string const s);
 
   void claim_bounce_buffer(char const *cap_name);

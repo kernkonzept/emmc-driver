@@ -1118,6 +1118,8 @@ Device<Driver>::power_up_sd(Cmd *cmd)
   Mmc::Reg_csd csd(cmd->resp);
   show_csd(csd);
 
+  _num_sectors = device_size(csd) / sector_size();
+
   cmd->init_arg(Mmc::Cmd7_select_card, _rca << 16);
   cmd_exec(cmd);
   cmd->check_error("CMD7: SELECT_CARD");
@@ -1746,6 +1748,19 @@ Device<Driver>::mmc_app_cmd(Cmd *cmd, l4_uint32_t cmdval, l4_uint32_t arg,
     cmd->init_arg(cmdval, arg);
   cmd->mark_app_cmd();
   cmd_exec(cmd);
+}
+
+template <class Driver>
+l4_uint64_t
+Device<Driver>::device_size(Mmc::Reg_csd const &csd)
+{
+  switch (csd.csd_structure())
+    {
+    case 0: return csd.s0.device_size();
+    case 1: return csd.s1.device_size();
+    case 2: return csd.s3.device_size();
+    default: return 0;
+    }
 }
 
 template <class Driver>
