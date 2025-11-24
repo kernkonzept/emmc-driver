@@ -146,6 +146,9 @@ public:
         res = L4::Ipc::make_cap(cap, L4_CAP_FPAGE_RWSD);
         L4::cap_cast<L4::Kobject>(cap)->dec_refcnt(1);
       }
+    else
+      Dbg(Dbg::Warn).printf("Error opening client connection for device='%s': %s!\n",
+                            device.c_str(), l4sys_errtostr(ret));
 
     return (ret == -L4_ENODEV && _scan_in_progress) ? -L4_EAGAIN : ret;
   }
