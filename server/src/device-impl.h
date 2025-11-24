@@ -225,9 +225,9 @@ Device<Driver>::dma_map_single(Block_device::Mem_region *region, l4_addr_t offse
           auto me_addr = me_ds_offs->second.find(offset);
           if (me_addr != me_ds_offs->second.end())
             {
-              if (num_sectors != me_addr->second.sectors)
+              if (num_sectors != me_addr->second.num_sectors)
                 warn.printf("\033[37;41;1mMAP %08lx/%08lx size mismatch %08zx/%08zx -- ignoring!\n",
-                            ds.cap(), offset, me_addr->second.sectors, num_sectors);
+                            ds.cap(), offset, me_addr->second.num_sectors, num_sectors);
               ++(me_addr->second.refcnt);
               *phys = me_addr->second.phys;
               return L4_EOK;
@@ -318,9 +318,9 @@ Device<Driver>::dma_unmap_single(L4Re::Dma_space::Dma_addr phys,
           warn.printf("\033[37;42;1mUNMAP %08llx not found in offs_map!\033[m\n", phys);
           return -L4_ENOENT;
         }
-      if (num_sectors != me_addr->second.sectors)
+      if (num_sectors != me_addr->second.num_sectors)
         warn.printf("\033[37;42;1mUNMAP %08llx size mismatch %08zx/%08zx -- ignoring\n",
-                    phys, me_addr->second.sectors, num_sectors);
+                    phys, me_addr->second.num_sectors, num_sectors);
       if (me_addr->second.refcnt > 1)
         {
           --(me_addr->second.refcnt);
@@ -707,8 +707,8 @@ Device<Driver>::handle_irq_inout_sdma(Cmd *cmd)
       if (cmd->cmd != Mmc::Cmd23_set_block_count)
         {
           auto const *b = cmd->blocks;
-          cmd->sector  += b->num_sectors;
-          cmd->sectors += b->num_sectors;
+          cmd->sector += b->num_sectors;
+          cmd->sectors_done += b->num_sectors;
           do
             {
               b = b->next.get();
@@ -765,19 +765,19 @@ template <class Driver>
 void
 Device<Driver>::set_block_count_adma2(Cmd *cmd)
 {
-  l4_uint32_t sectors = 0;
+  l4_uint32_t num_sectors = 0;
   for (auto const *b = cmd->blocks; b; b = b->next.get())
-    sectors += b->num_sectors;
+    num_sectors += b->num_sectors;
 
-  trace2.printf("set_block_count_adma2: sector=%u sectors=%u\n",
-                cmd->sector, sectors);
+  trace2.printf("set_block_count_adma2: sector=%u num_sectors=%u\n",
+                cmd->sector, num_sectors);
 
   if (!_has_cmd23 || _drv.auto_cmd23())
     {
       cmd->reinit_inout_data(cmd->flags.inout_read()
                                ? Mmc::Cmd18_read_multiple_block
                                : Mmc::Cmd25_write_multiple_block,
-                             cmd->sector * _addr_mult, sectors, 512,
+                             cmd->sector * _addr_mult, num_sectors, 512,
                              _has_cmd23 && _drv.auto_cmd23()
                                ? Cmd::Flag_auto_cmd23::Do_auto_cmd23
                                : Cmd::Flag_auto_cmd23::No_auto_cmd23);
@@ -787,8 +787,8 @@ Device<Driver>::set_block_count_adma2(Cmd *cmd)
   else
     {
       Mmc::Arg_cmd23_set_block_count a23;
-      a23.blocks() = sectors;
-      cmd->blockcnt = sectors;
+      a23.blocks() = num_sectors;
+      cmd->blockcnt = num_sectors;
       cmd->reinit_inout_nodata(Mmc::Cmd23_set_block_count, a23.raw);
     }
 }

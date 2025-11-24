@@ -166,7 +166,7 @@ public:
     flags.inout() = 1;
     flags.inout_read() = inout_read;
     sector = sector_val;
-    sectors = 0;
+    sectors_done = 0;
     blocks = blocks_val;
     cb_io = cb_io_val;
   }
@@ -255,13 +255,13 @@ public:
 
   // inout()
   l4_uint32_t  sector;          ///< Current sector on medium.
-  l4_uint32_t  sectors;         ///< Overall number of transferred sectors.
-  Block        const *blocks;   ///< See inout().
+  l4_uint32_t  sectors_done;    ///< Overall number of transferred sectors.
+  Block        const *blocks;   ///< See inout(): Next block.
 
   // internal
   Cmd_queue    *queue = nullptr;
 
-  Callback_io  cb_io = 0;       ///< Inout callback (inout()).
+  Callback_io  cb_io = nullptr; ///< Inout callback (inout()).
 };
 
 /**

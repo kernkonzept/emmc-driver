@@ -24,7 +24,7 @@ void Cmd::destruct()
   arg = 0;
   flags.reset();
   // invalidating this callback is actually important
-  cb_io  = 0;
+  cb_io = nullptr;
 }
 
 int Cmd::nr() const

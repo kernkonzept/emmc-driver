@@ -245,7 +245,7 @@ private:
   }
 
   l4_uint64_t bytes_transferred(Cmd const *cmd) const
-  { return (l4_uint64_t)cmd->sectors * sector_size(); }
+  { return l4_uint64_t{cmd->sectors_done} * sector_size(); }
 
   void handle_irq_inout(Cmd *cmd);
   Work_status handle_irq_inout_sdma(Cmd *cmd);
@@ -350,7 +350,7 @@ private:
   struct Phys_entry
   {
     L4Re::Dma_space::Dma_addr phys;
-    l4_size_t sectors;
+    l4_size_t num_sectors;
     l4_uint32_t refcnt;
   };
   // Phys => Dataspace + offset
