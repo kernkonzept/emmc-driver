@@ -1387,7 +1387,7 @@ Sdhci<TYPE>::adma2_set_descs_mem_region(T *desc, l4_uint64_t phys,
   for (; size; ++desc)
     {
       trace2.printf("  addr=%08llx size=%08x\n", phys, size);
-      if (desc > _adma2_desc + _adma2_desc_mem.size() / sizeof(T) - 1)
+      if (desc > (T*)_adma2_desc + _adma2_desc_mem.size() / sizeof(T) - 1)
         L4Re::throw_error(-L4_EINVAL, "Too many ADMA2 descriptors");
       if (phys >= T::get_max_addr())
         L4Re::throw_error(-L4_EINVAL, "Implement 64-bit ADMA2 mode");
