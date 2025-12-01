@@ -47,10 +47,10 @@ Device<Driver>::Device(int nr, l4_uint64_t mmio_addr, l4_uint64_t mmio_size,
                        int irq_num, L4_irq_mode irq_mode, L4::Cap<L4::Icu> icu,
                        L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
                        L4Re::Util::Object_registry *registry,
-                       l4_uint32_t host_clock, int max_seg,
+                       l4_uint32_t host_clock, unsigned max_seg,
                        Device_type_disable dt_disable)
-: _drv(nr, iocap, mmio_space, mmio_addr, mmio_size, dma, host_clock,
-       [this](bool is_data) { receive_irq(is_data); }),
+: _drv(nr, iocap, mmio_space, mmio_addr, mmio_size, dma, max_seg,
+       host_clock, [this](bool is_data) { receive_irq(is_data); }),
   _irq_num(irq_num),
   _irq_mode(irq_mode),
   _icu(icu),
@@ -98,9 +98,11 @@ Device<Driver>::Device(int nr, l4_uint64_t mmio_addr, l4_uint64_t mmio_size,
 
   claim_bounce_buffer("bbds");
 
-  info.printf("\033[33mMax request size %s%s.\033[m\n",
+  info.printf("\033[33mMax size per segment %s%s, max segments %u.\033[m\n",
               Util::readable_size(max_size()).c_str(),
-              max_size() < Max_size ? " (limited by bounce buffer / max_seg)" : "");
+              max_size() < _drv.max_inout_req_size() / max_seg
+                ? " (limited by bounce buffer / max_seg)" : "",
+              max_seg);
 }
 
 template <class Driver>

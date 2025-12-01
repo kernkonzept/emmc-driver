@@ -237,6 +237,12 @@ private:
     using Reg<Blk_att>::Reg;
     using Reg<Blk_att>::raw;
 
+    /**
+     * Maximum number of sectors per request, more don't fit into `blkcnt`.
+     * Bigger values are possible using V4 mode (Host Controller Version 4.10).
+     */
+    static constexpr l4_size_t max_blocks = (1 << 16) - 1;
+
     CXX_BITFIELD_MEMBER(16, 31, blkcnt, raw); ///< Blocks count for transfer
     CXX_BITFIELD_MEMBER(0, 12, blksize, raw); ///< Transfer block size
   };
@@ -246,6 +252,12 @@ private:
   {
     using Reg<Blk_size>::Reg;
     using Reg<Blk_size>::raw;
+
+    /**
+     * Maximum number of sectors per request, more don't fit into `blkcnt`.
+     * Bigger values are possible using V4 mode (Host Controller Version 4.10).
+     */
+    static constexpr l4_size_t max_blocks = (1 << 16) - 1;
 
     CXX_BITFIELD_MEMBER(16, 31, blkcnt, raw); ///< Blocks count for transfer
     CXX_BITFIELD_MEMBER(12, 14, sdma_buf_bndry, raw); ///< SDMA buffer boundary
@@ -1141,6 +1153,10 @@ private:
     CXX_BITFIELD_MEMBER(1, 1, end, word0);
     CXX_BITFIELD_MEMBER(0, 0, valid, word0);
 
+    // 16-bit would allow a maximum size of 64 KiB but Linux uses 32 KiB so
+    // do this here as well.
+    static constexpr l4_size_t max_length = 32768;
+
     void reset()
     { cxx::write_now(&word1, 0); cxx::write_now(&word0, 0); }
 
@@ -1200,9 +1216,21 @@ public:
                  L4::Cap<L4Re::Mmio_space> mmio_space,
                  l4_uint64_t mmio_base, l4_uint64_t mmio_size,
                  L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
+                 unsigned max_seg,
                  l4_uint32_t host_clock, Receive_irq receive_irq);
 
   ~Sdhci();
+
+  /**
+   * Return the maximum number of supported bytes per inout request.
+   */
+  l4_size_t max_inout_req_size() const
+  {
+    if (TYPE == Sdhci_type::Usdhc)
+      return Reg_blk_att::max_blocks << 9;
+    else
+      return Reg_blk_size::max_blocks << 9;
+  }
 
   /** Initialize controller registers. */
   void init();
@@ -1313,6 +1341,13 @@ public:
   void dump() const;
 
 private:
+  /**
+   * Return the amount of memory used for ADMA2 descriptors which is required to
+   * handle up to 'max_seg' segments per request with a maximum request defined
+   * by the number of blocks which can be addresses during a single request.
+   */
+  l4_size_t adma2_desc_mem_size(unsigned max_seg);
+
   /**
    * Wait until the controller is ready for command submission.
    *

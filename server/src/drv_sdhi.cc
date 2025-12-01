@@ -26,7 +26,7 @@ Sdhi::Sdhi(int nr,
            L4::Cap<L4Re::Mmio_space> mmio_space,
            l4_uint64_t mmio_base, l4_uint64_t mmio_size,
            L4Re::Util::Shared_cap<L4Re::Dma_space> const &,
-           l4_uint32_t, Receive_irq receive_irq)
+           unsigned, l4_uint32_t, Receive_irq receive_irq)
 : Drv(iocap, mmio_space, mmio_base, mmio_size, receive_irq),
   warn(Dbg::Warn, "sdhi", nr),
   info(Dbg::Info, "sdhi", nr),

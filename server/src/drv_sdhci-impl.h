@@ -11,6 +11,7 @@
  */
 
 #include <l4/sys/cache.h>
+#include <l4/sys/cxx/consts>
 
 #include "cmd.h"
 #include "debug.h"
@@ -25,10 +26,11 @@ Sdhci<TYPE>::Sdhci(int nr,
                    L4::Cap<L4Re::Mmio_space> mmio_space,
                    l4_uint64_t mmio_base, l4_uint64_t mmio_size,
                    L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
+                   unsigned max_seg,
                    l4_uint32_t host_clock, Receive_irq receive_irq)
 : Drv<Sdhci<TYPE>>(iocap, mmio_space, mmio_base, mmio_size, receive_irq),
-  _adma2_desc_mem("sdhci_adma_buf", 4096, dma,
-                  L4Re::Dma_space::Direction::To_device,
+  _adma2_desc_mem("sdhci_adma_buf", adma2_desc_mem_size(max_seg),
+                  dma, L4Re::Dma_space::Direction::To_device,
                   L4Re::Rm::F::Cache_uncached),
   _adma2_desc_phys(_adma2_desc_mem.pget()),
   _adma2_desc(_adma2_desc_mem.get<Adma2_desc_64>()),
@@ -70,12 +72,16 @@ Sdhci<TYPE>::Sdhci(int nr,
                           "ADMA2 descriptors at %08llx-%08llx not accessible by DMA",
                           _adma2_desc_phys, _adma2_desc_phys + _adma2_desc_mem.size());
 
+
   info.printf("SDHCI controller capabilities: %08x (%d-bit). SDHCI %s.\n",
               cap1.raw, cap1.bit64_v3() ? 64 : 32,
               Reg_host_version(this).spec_version());
   if (   Reg_host_version(this).spec_vers() >= 2
       && Reg_host_ctrl2(this).presvlen())
     warn.printf("SDHCI: Preset value enable\n");
+
+  info.printf("Using %s of memory for ADMA2 descriptors.\n",
+              Util::readable_size(_adma2_desc_mem.size()).c_str());
 
   if (cap1.bit64_v3())
     _adma2_64 = true;
@@ -85,6 +91,17 @@ template <Sdhci_type TYPE>
 Sdhci<TYPE>::~Sdhci()
 {
   done_platform();
+}
+
+template <Sdhci_type TYPE>
+l4_size_t
+Sdhci<TYPE>::adma2_desc_mem_size(unsigned max_seg)
+{
+  auto desc_size = Reg_cap1_sdhci(this).bit64_v3() ? sizeof(Adma2_desc_64)
+                                                   : sizeof(Adma2_desc_32);
+  static_assert(Adma2_desc_32::max_length == Adma2_desc_64::max_length);
+  unsigned descs_per_seg = max_inout_req_size() / Adma2_desc_32::max_length;
+  return L4::round_page(max_seg * descs_per_seg * desc_size);
 }
 
 template <Sdhci_type TYPE>
@@ -1395,7 +1412,7 @@ Sdhci<TYPE>::adma2_set_descs_mem_region(T *desc, l4_uint64_t phys,
       desc->valid() = 1;
       desc->act() = T::Act_tran;
       // XXX SD spec also defines 26-bit data length mode
-      l4_uint32_t desc_length = cxx::min(size, 32768U);
+      l4_uint32_t desc_length = cxx::min<l4_uint32_t>(size, T::max_length);
       desc->length() = desc_length;
       desc->set_addr(phys + _dma_offset);
       phys += desc_length;

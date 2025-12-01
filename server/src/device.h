@@ -135,7 +135,7 @@ public:
          int irq_num, L4_irq_mode irq_mode, L4::Cap<L4::Icu> icu,
          L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
          L4Re::Util::Object_registry *registry,
-         l4_uint32_t host_clock, int max_seg,
+         l4_uint32_t host_clock, unsigned max_seg,
          Device_type_disable dt_disable);
 
   void handle_irq();
@@ -156,16 +156,13 @@ private:
   { return Sector_size; }
 
   /**
-   * Maximum size of one segment.
-   *
-   * Actually it should be possible to handle request with a size up to
-   * 65535 * 512 = 32MB - 512.
+   * Maximum size of one segment in an inout request.
    */
   l4_size_t max_size() const override
   {
-    return _drv.provided_bounce_buffer()
-      ? cxx::min(_drv._bb_size / _max_seg, l4_size_t{Max_size})
-      : l4_size_t{Max_size};
+    l4_size_t sz = _drv.provided_bounce_buffer() ? _drv._bb_size
+                                                 : _drv.max_inout_req_size();
+    return sz / _max_seg;
   }
 
   /**
@@ -293,7 +290,7 @@ private:
   L4::Cap<L4::Irq> _irq;        ///< interrupt capability
   L4::Cap<L4::Icu> _icu;        ///< ICU capability
   L4Re::Util::Shared_cap<L4Re::Dma_space> _dma;
-  int _max_seg;
+  unsigned _max_seg;
 
   /**
    * Sector size multiplier.
