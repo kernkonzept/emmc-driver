@@ -1079,7 +1079,7 @@ Device<Driver>::power_up_sd(Cmd *cmd)
           if (_drv.card_busy())
             L4Re::throw_error(-L4_EINVAL, "Still busy after set voltage");
 
-          trace.printf("Power switch to 1.8V took %llums.\n",
+          trace.printf("Power switch to 1.8V took %llu ms.\n",
                        Util::tsc_to_ms(Util::read_tsc() - now));
           v18 = true;
           _drv.delay(5);
@@ -1345,7 +1345,7 @@ Device<Driver>::power_up_sd(Cmd *cmd)
 
   _sd_timing = mmc_timing;
 
-  warn.printf("Device initialization took %llums (%llums busy wait, %llums sleep).\n",
+  warn.printf("Device initialization took %llu ms (%llu ms busy wait, %llu ms sleep).\n",
               Util::tsc_to_ms(Util::read_tsc() - _init_time),
               Util::tsc_to_ms(_drv._time_busy),
               Util::tsc_to_ms(_drv._time_sleep));
@@ -1671,7 +1671,7 @@ Device<Driver>::power_up_mmc(Cmd *cmd)
       break;
     }
 
-  warn.printf("Device initialization took %llums (%llums busy wait, %llums sleep).\n",
+  warn.printf("Device initialization took %llu ms (%llu ms busy wait, %llu ms sleep).\n",
               Util::tsc_to_ms(Util::read_tsc() - _init_time),
               Util::tsc_to_ms(_drv._time_busy),
               Util::tsc_to_ms(_drv._time_sleep));

@@ -37,7 +37,7 @@ Util::readable_size(l4_uint64_t size)
           std::string s = std::to_string(d1);
           if (d2)
             s += "." + std::to_string(d2);
-          return s + " KMG"[i] + "iB";
+          return s + " " + " KMG"[i] + "iB";
         }
     }
 }
@@ -56,7 +56,7 @@ Util::readable_freq(l4_uint32_t freq)
           std::string s = std::to_string(d1);
           if (d2)
             s += "." + std::to_string(d2);
-          return s + " KMG"[i] + "Hz";
+          return s + " " + " KMG"[i] + "Hz";
         }
     }
 }
@@ -136,7 +136,7 @@ Util::poll(l4_cpu_time_t us, Util::Poll_timeout_handler handler, char const *s)
   if (freq_tsc_hz())
     {
       l4_uint64_t us = tsc_to_us(time);
-      info.printf("...done %s(%lluus).\n", us >= 10 ? "\033[31;1m" : "", us);
+      info.printf("...done %s(%llu us).\n", us >= 10 ? "\033[31;1m" : "", us);
     }
   else
     info.printf("...done.\n");

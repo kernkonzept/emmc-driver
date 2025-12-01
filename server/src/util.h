@@ -18,10 +18,10 @@
 
 struct Util
 {
-  /// Return descriptive string like '5.6MiB' or similar.
+  /// Return descriptive string like '5.6 MiB' or similar.
   static std::string readable_size(l4_uint64_t size);
 
-  /// Return descriptive string like '6.7MHz' or similar.
+  /// Return descriptive string like '6.7 MHz' or similar.
   static std::string readable_freq(l4_uint32_t freq);
 
   static char printable(char c) { return c >= ' ' ? c : ' '; }

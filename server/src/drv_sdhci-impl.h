@@ -434,7 +434,7 @@ Sdhci<TYPE>::cmd_wait_available(Cmd const *cmd, bool sleep)
   _time_sleep += time;
   l4_uint64_t us = Util::tsc_to_us(time);
   if (us >= 10)
-    trace.printf("cmd_wait_available took \033[1m%lluus.\033[m\n", us);
+    trace.printf("cmd_wait_available took \033[1m%llu us.\033[m\n", us);
 }
 
 /**
@@ -811,7 +811,7 @@ Sdhci<TYPE>::cmd_wait_cmd_finished(Cmd *cmd, bool verbose)
                           ? " (failed, expected)"
                           : " \033[31m(failed)\033[m"
                         : "";
-      info.printf("CMD%d took \033[1m%lluus%s.\033[m\n", cmd->cmd_idx(), us, s);
+      info.printf("CMD%d took \033[1m%llu us%s.\033[m\n", cmd->cmd_idx(), us, s);
     }
 }
 
@@ -832,7 +832,7 @@ Sdhci<TYPE>::cmd_wait_data_finished(Cmd *cmd)
   _time_sleep += time;
   l4_uint64_t us = Util::tsc_to_us(time);
   if (us >= 1000)
-    warn.printf("CMD%d data took \033[1m%lluus.\033[m\n", cmd->cmd_idx(), us);
+    warn.printf("CMD%d data took \033[1m%llu us.\033[m\n", cmd->cmd_idx(), us);
 }
 
 /**

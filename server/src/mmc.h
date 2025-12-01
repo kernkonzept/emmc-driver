@@ -1077,20 +1077,20 @@ public:
       {
         switch (type)
           {
-          case 1 << Bt_hs26: return "High-Speed eMMC at 26MHz";
-          case 1 << Bt_hs52: return "High-Speed eMMC at 52MHz";
+          case 1 << Bt_hs26: return "High-Speed eMMC at 26 MHz";
+          case 1 << Bt_hs52: return "High-Speed eMMC at 52 MHz";
           case 1 << Bt_hs52_ddr_18:
-            return "High-Speed DDR eMMC at 52MHz (1.8V or 3V)";
+            return "High-Speed DDR eMMC at 52 MHz (1.8 V or 3 V)";
           case 1 << Bt_hs52_ddr_12:
-            return "High-Speed DDR eMMC at 52MHz (1.2V)";
+            return "High-Speed DDR eMMC at 52 MHz (1.2 V)";
           case 1 << Bt_hs200_sdr_18:
-            return "HS200 Single Data Rate eMMC at 200MHz (1.8V)";
+            return "HS200 Single Data Rate eMMC at 200 MHz (1.8 V)";
           case 1 << Bt_hs200_sdr_12:
-            return "HS200 Single Data Rate eMMC at 200MHz (1.2V)";
+            return "HS200 Single Data Rate eMMC at 200 MHz (1.2 V)";
           case 1 << Bt_hs400_ddr_18:
-            return "HS400 Dual Data Rate eMMC at 200MHz (1.8V)";
+            return "HS400 Dual Data Rate eMMC at 200 MHz (1.8 V)";
           case 1 << Bt_hs400_ddr_12:
-            return "HS400 Dual Data Rate eMMC at 200MHz (1.2V)";
+            return "HS400 Dual Data Rate eMMC at 200 MHz (1.2 V)";
           case 0:  return "Fallback";
           default: return "unknown";
           }
