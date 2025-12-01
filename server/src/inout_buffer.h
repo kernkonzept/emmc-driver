@@ -24,6 +24,8 @@
 #include <cassert>
 #include <cstring>
 
+#include "util.h"
+
 class Inout_buffer : public cxx::Ref_obj
 {
 public:
@@ -51,10 +53,11 @@ public:
     _ds = L4Re::chkcap(L4Re::Util::make_unique_cap<L4Re::Dataspace>(),
                        "Allocate dataspace capability for IO memory.");
 
-    L4Re::chksys(e->mem_alloc()->alloc(size, _ds.get(),
-                                       L4Re::Mem_alloc::Continuous
-                                       | L4Re::Mem_alloc::Pinned),
-                 "Allocate pinned memory.");
+    if (long err = e->mem_alloc()->alloc(size, _ds.get(),
+                                         L4Re::Mem_alloc::Continuous
+                                         | L4Re::Mem_alloc::Pinned); err < 0)
+      L4Re::throw_error_fmt(err, "Error allocating %s of pinned memory",
+                            Util::readable_size(size).c_str());
 
     attach_and_dma_map(size, dir, _ds.get(), flags);
   }
