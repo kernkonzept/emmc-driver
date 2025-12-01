@@ -295,8 +295,28 @@ private:
   L4Re::Util::Shared_cap<L4Re::Dma_space> _dma;
   int _max_seg;
 
+  /**
+   * Sector size multiplier.
+   *
+   * `_addr_mult` == 512: byte mode (OCR.ccs=1):
+   *  - SDHC: up to 2 GiB
+   *  - CMD16 sets block length 1..512 Byte
+   *  - block addresses in bytes, so up to 2^32 bytes = 4 GiB addressable
+   *
+   * `_addr_mult` == 1: sector mode (OCR.ccs=1):
+   *  - SDHC: > 2 GiB ... 32 GiB
+   *  - SDXC: > 32 GiB ... 2 TiB
+   *  - SDUC: > 2 TiB ... 128 TiB
+   *  - CMD16 ignored, block size always 512 byte
+   *  - block addresses in 512 Byte sectors, so up to 2^41 = 2 TiB addressable
+   *    (SDUC uses other extensions to further increase addressable range).
+   *
+   *  @note The virtio-block interface defines sectors / num_sectors of 512
+   *        bytes (see Device<>::inout_data()).
+   */
+  l4_uint64_t _addr_mult = 1;
+
   /// Device-related
-  l4_uint64_t _addr_mult = 1;   ///< sector size multiplier
   l4_uint64_t _num_sectors = 0; ///< number of sectors of this device
   l4_uint16_t _rca = 0x0001;    ///< device address: MMC: assigned by the host
                                 ///<                 SD:  assigned by the medium
