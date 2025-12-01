@@ -421,71 +421,18 @@ Sdhci<TYPE>::cmd_wait_available(Cmd const *cmd, bool sleep)
 }
 
 /**
- * Helper for cmd_submit(): Set block size and number of blocks to transfer.
+ * Helper for cmd_submit(): Set transfer mode/command according to DMA.
  */
 template <Sdhci_type TYPE>
-void
-Sdhci<TYPE>::cmd_submit_set_block_size_and_count(Cmd const *cmd)
+L4Re::Dma_space::Dma_addr
+Sdhci<TYPE>::cmd_submit_prepare_dma(Cmd *cmd,
+                                    Reg_cmd_xfr_typ &xt, Reg_mix_ctrl &mc)
 {
-  if (TYPE == Sdhci_type::Usdhc)
-    {
-      Reg_blk_att ba;
-      ba.blkcnt() = cmd->blockcnt;
-      if (ba.blkcnt() != cmd->blockcnt)
-        L4Re::throw_error(-L4_EINVAL, "Number of data blocks to transfer");
-      ba.blksize() = cmd->blocksize;
-      if (ba.blksize() != cmd->blocksize)
-        L4Re::throw_error(-L4_EINVAL, "Size of data blocks to transfer");
-      ba.write(this);
-    }
-  else
-    {
-      Reg_blk_size bs;
-      bs.blkcnt() = cmd->blockcnt;
-      if (bs.blkcnt() != cmd->blockcnt)
-        L4Re::throw_error(-L4_EINVAL, "Number of data blocks to transfer");
-      bs.blksize() = cmd->blocksize;
-      if (bs.blksize() != cmd->blocksize)
-        L4Re::throw_error(-L4_EINVAL, "Size of data blocks to transfer");
-      bs.sdma_buf_bndry() = Reg_blk_size::Bndry_512k; // only for SDMA
-      bs.write(this);
-    }
-}
-
-/**
- * Send an MMC command to the controller.
- */
-template <Sdhci_type TYPE>
-void
-Sdhci<TYPE>::cmd_submit(Cmd *cmd)
-{
-  if (cmd->status != Cmd::Ready_for_submit)
-    L4Re::throw_error(-L4_EINVAL, "Invalid command submit status");
-
-  Reg_cmd_xfr_typ xt;  // SDHCI + uSDHC
-  Reg_mix_ctrl mc;     // uSDHC
-
-  if (TYPE == Sdhci_type::Usdhc)
-    mc.read(this);
-
-  xt.cmdinx() = cmd->cmd_idx();
-  xt.cccen() = !!(cmd->cmd & Mmc::Rsp_check_crc);
-  xt.cicen() = !!(cmd->cmd & Mmc::Rsp_has_opcode);
-  if (cmd->cmd & Mmc::Rsp_136_bits)
-    xt.rsptyp() = Reg_cmd_xfr_typ::Resp::Length_136;
-  else if (cmd->cmd & Mmc::Rsp_check_busy)
-    xt.rsptyp() = Reg_cmd_xfr_typ::Resp::Length_48_check_busy;
-  else if (cmd->cmd & Mmc::Rsp_present)
-    xt.rsptyp() = Reg_cmd_xfr_typ::Resp::Length_48;
-  else
-    xt.rsptyp() = Reg_cmd_xfr_typ::Resp::No;
-  if (   cmd->cmd == Mmc::Cmd12_stop_transmission_rd
-      || cmd->cmd == Mmc::Cmd12_stop_transmission_wr)
-    xt.cmdtyp() = Reg_cmd_xfr_typ::Cmd52_abort;
-
   L4Re::Dma_space::Dma_addr dma_addr = ~0ULL;
 
-  if (No_dma_during_setup && cmd->flags.has_data() && cmd->data_virt != 0
+  if (No_dma_during_setup
+      && cmd->flags.has_data()
+      && cmd->data_virt != 0
       && (TYPE == Sdhci_type::Iproc || TYPE == Sdhci_type::Bcm2711))
     {
       Reg_blk_size bz;
@@ -589,115 +536,202 @@ Sdhci<TYPE>::cmd_submit(Cmd *cmd)
         }
     }
 
-  if (   cmd->cmd == Mmc::Cmd19_send_tuning_block
-      || cmd->cmd == Mmc::Cmd21_send_tuning_block)
+  return dma_addr;
+}
+
+/**
+ * Helper for cmd_submit(): Handle tuning.
+ */
+template <Sdhci_type TYPE>
+void
+Sdhci<TYPE>::cmd_submit_handle_tuning(Cmd const *cmd,
+                                      Reg_cmd_xfr_typ &xt, Reg_mix_ctrl &mc)
+{
+  l4_uint8_t blksize = cmd->cmd == Mmc::Cmd19_send_tuning_block ? 64 : 128;
+  if (TYPE == Sdhci_type::Usdhc)
     {
-      l4_uint8_t blksize = cmd->cmd == Mmc::Cmd19_send_tuning_block ? 64 : 128;
-      if (TYPE == Sdhci_type::Usdhc)
-        {
-          Reg_blk_att ba;
-          ba.blkcnt() = 1;
-          ba.blksize() = blksize;
-          ba.write(this);
-        }
-      else
-        {
-          Reg_blk_size bz;
-          bz.blksize() = blksize;
-          bz.blkcnt() = 0; // ???
-          bz.sdma_buf_bndry() = 7;
-          bz.write(this);
-        }
+      Reg_blk_att ba;
+      ba.blkcnt() = 1;
+      ba.blksize() = blksize;
+      ba.write(this);
+    }
+  else
+    {
+      Reg_blk_size bz;
+      bz.blksize() = blksize;
+      bz.blkcnt() = 0; // ???
+      bz.sdma_buf_bndry() = 7;
+      bz.write(this);
+    }
 
-      Reg_wtmk_lvl wml(this);
-      wml.rd_wml() = blksize;
-      wml.wr_wml() = blksize;
-      wml.rd_brst_len() = Reg_wtmk_lvl::Brst_dma;
-      wml.wr_brst_len() = Reg_wtmk_lvl::Brst_dma;
-      wml.write(this);
+  Reg_wtmk_lvl wml(this);
+  wml.rd_wml() = blksize;
+  wml.wr_wml() = blksize;
+  wml.rd_brst_len() = Reg_wtmk_lvl::Brst_dma;
+  wml.wr_brst_len() = Reg_wtmk_lvl::Brst_dma;
+  wml.write(this);
 
+  switch (TYPE)
+    {
+    case Sdhci_type::Usdhc:
+      {
+        mc.dmaen() = 0;
+        mc.bcen() = 0;
+        mc.ac12en() = 0;
+        mc.dtdsel() = 1;
+        mc.msbsel() = 0;
+        mc.ac23en() = 0;
+        mc.auto_tune_en() = 1;
+        mc.fbclk_sel() = 1;
+
+        Reg_autocmd12_err_status es(this);
+        es.smp_clk_sel() = 0;
+        es.execute_tuning() = 1;
+        es.write(this);
+        break;
+      }
+    case Sdhci_type::Iproc:
+    case Sdhci_type::Bcm2711:
+      {
+        Reg_host_ctrl2 hc2(this);
+        hc2.tuned() = 0;
+        hc2.tuneon() = 1;
+        hc2.write(this);
+        xt.dtdsel() = 1;
+        break;
+      }
+    default:
+      xt.ac12en() = 0;
+      xt.dtdsel() = 1;
+      break;
+    }
+  xt.dpsel() = 1;
+}
+
+/**
+ * Helper for cmd_submit(): Set DMA address.
+ */
+template <Sdhci_type TYPE>
+void
+Sdhci<TYPE>::cmd_submit_set_dma_addr(Cmd const *cmd,
+                                     L4Re::Dma_space::Dma_addr dma_addr,
+                                     Reg_cmd_xfr_typ &xt, Reg_mix_ctrl &mc)
+{
+  if (dma_adma2())
+    {
       switch (TYPE)
         {
         case Sdhci_type::Usdhc:
-          {
-            mc.dmaen() = 0;
-            mc.bcen() = 0;
-            mc.ac12en() = 0;
-            mc.dtdsel() = 1;
-            mc.msbsel() = 0;
+          if (cmd->flags.auto_cmd23())
+            {
+              assert(auto_cmd23());
+              mc.ac23en() = 1;
+              while (Reg_pres_state(this).dla())
+                ;
+              Reg_cmd_arg2(cmd->blockcnt).write(this);
+            }
+          else
             mc.ac23en() = 0;
-            mc.auto_tune_en() = 1;
-            mc.fbclk_sel() = 1;
-
-            Reg_autocmd12_err_status es(this);
-            es.smp_clk_sel() = 0;
-            es.execute_tuning() = 1;
-            es.write(this);
-            break;
-          }
+          break;
         case Sdhci_type::Iproc:
         case Sdhci_type::Bcm2711:
-          {
-            Reg_host_ctrl2 hc2(this);
-            hc2.tuned() = 0;
-            hc2.tuneon() = 1;
-            hc2.write(this);
-            xt.dtdsel() = 1;
-            break;
-          }
-        default:
-          xt.ac12en() = 0;
-          xt.dtdsel() = 1;
+          if (cmd->flags.auto_cmd23())
+            {
+              assert(auto_cmd23());
+              xt.ac23en() = 1;
+              Reg_cmd_arg2(cmd->blockcnt).write(this);
+            }
+          else
+            xt.ac23en() = 0;
           break;
+        default:
+          break; // This cannot happen, see auto_cmd23()
         }
-      xt.dpsel() = 1;
+      Reg_adma_sys_addr_lo(dma_addr & 0xffffffff).write(this);
+      Reg_adma_sys_addr_hi(dma_addr >> 32).write(this);
     }
+  else
+    {
+      if (TYPE == Sdhci_type::Usdhc)
+        for (;;)
+          if (!Reg_pres_state(this).dla())
+            break;
+      Reg_ds_addr(dma_addr).write(this);
+    }
+}
+
+/**
+ * Helper for cmd_submit(): Set block size and number of blocks to transfer.
+ */
+template <Sdhci_type TYPE>
+void
+Sdhci<TYPE>::cmd_submit_set_block_size_and_count(Cmd const *cmd)
+{
+  if (TYPE == Sdhci_type::Usdhc)
+    {
+      Reg_blk_att ba;
+      ba.blkcnt() = cmd->blockcnt;
+      if (ba.blkcnt() != cmd->blockcnt)
+        L4Re::throw_error(-L4_EINVAL, "Number of data blocks to transfer");
+      ba.blksize() = cmd->blocksize;
+      if (ba.blksize() != cmd->blocksize)
+        L4Re::throw_error(-L4_EINVAL, "Size of data blocks to transfer");
+      ba.write(this);
+    }
+  else
+    {
+      Reg_blk_size bs;
+      bs.blkcnt() = cmd->blockcnt;
+      if (bs.blkcnt() != cmd->blockcnt)
+        L4Re::throw_error(-L4_EINVAL, "Number of data blocks to transfer");
+      bs.blksize() = cmd->blocksize;
+      if (bs.blksize() != cmd->blocksize)
+        L4Re::throw_error(-L4_EINVAL, "Size of data blocks to transfer");
+      bs.sdma_buf_bndry() = Reg_blk_size::Bndry_512k; // only for SDMA
+      bs.write(this);
+    }
+}
+
+/**
+ * Send an MMC command to the controller.
+ */
+template <Sdhci_type TYPE>
+void
+Sdhci<TYPE>::cmd_submit(Cmd *cmd)
+{
+  if (cmd->status != Cmd::Ready_for_submit)
+    L4Re::throw_error(-L4_EINVAL, "Invalid command submit status");
+
+  Reg_cmd_xfr_typ xt;  // SDHCI + uSDHC
+  Reg_mix_ctrl mc;     // uSDHC
+
+  if (TYPE == Sdhci_type::Usdhc)
+    mc.read(this);
+
+  xt.cmdinx() = cmd->cmd_idx();
+  xt.cccen() = !!(cmd->cmd & Mmc::Rsp_check_crc);
+  xt.cicen() = !!(cmd->cmd & Mmc::Rsp_has_opcode);
+  if (cmd->cmd & Mmc::Rsp_136_bits)
+    xt.rsptyp() = Reg_cmd_xfr_typ::Resp::Length_136;
+  else if (cmd->cmd & Mmc::Rsp_check_busy)
+    xt.rsptyp() = Reg_cmd_xfr_typ::Resp::Length_48_check_busy;
+  else if (cmd->cmd & Mmc::Rsp_present)
+    xt.rsptyp() = Reg_cmd_xfr_typ::Resp::Length_48;
+  else
+    xt.rsptyp() = Reg_cmd_xfr_typ::Resp::No;
+  if (   cmd->cmd == Mmc::Cmd12_stop_transmission_rd
+      || cmd->cmd == Mmc::Cmd12_stop_transmission_wr)
+    xt.cmdtyp() = Reg_cmd_xfr_typ::Cmd52_abort;
+
+  L4Re::Dma_space::Dma_addr dma_addr = cmd_submit_prepare_dma(cmd, xt, mc);
+
+  if (   cmd->cmd == Mmc::Cmd19_send_tuning_block
+      || cmd->cmd == Mmc::Cmd21_send_tuning_block)
+    cmd_submit_handle_tuning(cmd, xt, mc);
 
   if (dma_addr != ~0ULL)
     {
-      dma_addr += _dma_offset;
-      if (dma_adma2())
-        {
-          switch (TYPE)
-            {
-            case Sdhci_type::Usdhc:
-              if (cmd->flags.auto_cmd23())
-                {
-                  assert(auto_cmd23());
-                  mc.ac23en() = 1;
-                  while (Reg_pres_state(this).dla())
-                    ;
-                  Reg_cmd_arg2(cmd->blockcnt).write(this);
-                }
-              else
-                mc.ac23en() = 0;
-              break;
-            case Sdhci_type::Iproc:
-            case Sdhci_type::Bcm2711:
-              if (cmd->flags.auto_cmd23())
-                {
-                  assert(auto_cmd23());
-                  xt.ac23en() = 1;
-                  Reg_cmd_arg2(cmd->blockcnt).write(this);
-                }
-              else
-                xt.ac23en() = 0;
-              break;
-            default:
-              break; // This cannot happen, see auto_cmd23()
-            }
-          Reg_adma_sys_addr_lo(dma_addr & 0xffffffff).write(this);
-          Reg_adma_sys_addr_hi(dma_addr >> 32).write(this);
-        }
-      else
-        {
-          if (TYPE == Sdhci_type::Usdhc)
-            for (;;)
-              if (!Reg_pres_state(this).dla())
-                break;
-          Reg_ds_addr(dma_addr).write(this);
-        }
-
+      cmd_submit_set_dma_addr(cmd, dma_addr + _dma_offset, xt, mc);
       cmd_submit_set_block_size_and_count(cmd);
     }
 

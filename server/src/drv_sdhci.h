@@ -1335,6 +1335,19 @@ private:
   std::string str_caps() const
   { return Reg_host_ctrl_cap(this).str_caps(); }
 
+  /** Helper for cmd_submit(): Set transfer mode/command according to DMA. */
+  L4Re::Dma_space::Dma_addr cmd_submit_prepare_dma(Cmd *cmd,
+                                                   Reg_cmd_xfr_typ &xt,
+                                                   Reg_mix_ctrl &mc);
+
+  /** Helper for cmd_submit(): Handle tuning. */
+  void cmd_submit_handle_tuning(Cmd const *cmd,
+                                Reg_cmd_xfr_typ &xt, Reg_mix_ctrl &mc);
+
+  /** Helper for cmd_submit(): Set DMA address. */
+  void cmd_submit_set_dma_addr(Cmd const *cmd, L4Re::Dma_space::Dma_addr dma_addr,
+                                Reg_cmd_xfr_typ &xt, Reg_mix_ctrl &mc);
+
   /** Helper for cmd_submit(): Set block size and block count. */
   void cmd_submit_set_block_size_and_count(Cmd const *cmd);
 
