@@ -421,6 +421,38 @@ Sdhci<TYPE>::cmd_wait_available(Cmd const *cmd, bool sleep)
 }
 
 /**
+ * Helper for cmd_submit(): Set block size and number of blocks to transfer.
+ */
+template <Sdhci_type TYPE>
+void
+Sdhci<TYPE>::cmd_submit_set_block_size_and_count(Cmd const *cmd)
+{
+  if (TYPE == Sdhci_type::Usdhc)
+    {
+      Reg_blk_att ba;
+      ba.blkcnt() = cmd->blockcnt;
+      if (ba.blkcnt() != cmd->blockcnt)
+        L4Re::throw_error(-L4_EINVAL, "Number of data blocks to transfer");
+      ba.blksize() = cmd->blocksize;
+      if (ba.blksize() != cmd->blocksize)
+        L4Re::throw_error(-L4_EINVAL, "Size of data blocks to transfer");
+      ba.write(this);
+    }
+  else
+    {
+      Reg_blk_size bs;
+      bs.blkcnt() = cmd->blockcnt;
+      if (bs.blkcnt() != cmd->blockcnt)
+        L4Re::throw_error(-L4_EINVAL, "Number of data blocks to transfer");
+      bs.blksize() = cmd->blocksize;
+      if (bs.blksize() != cmd->blocksize)
+        L4Re::throw_error(-L4_EINVAL, "Size of data blocks to transfer");
+      bs.sdma_buf_bndry() = Reg_blk_size::Bndry_512k; // only for SDMA
+      bs.write(this);
+    }
+}
+
+/**
  * Send an MMC command to the controller.
  */
 template <Sdhci_type TYPE>
@@ -522,30 +554,6 @@ Sdhci<TYPE>::cmd_submit(Cmd *cmd)
           else
             dma_addr = cmd->data_phys;
           trace2.printf("SDMA: addr=%08llx size=%08zx\n", dma_addr, blk_size);
-        }
-
-      if (TYPE == Sdhci_type::Usdhc)
-        {
-          Reg_blk_att ba;
-          ba.blkcnt() = cmd->blockcnt;
-          if (ba.blkcnt() != cmd->blockcnt)
-            L4Re::throw_error(-L4_EINVAL, "Number of data blocks to transfer");
-          ba.blksize() = cmd->blocksize;
-          if (ba.blksize() != cmd->blocksize)
-            L4Re::throw_error(-L4_EINVAL, "Size of data blocks to transfer");
-          ba.write(this);
-        }
-      else
-        {
-          Reg_blk_size bs;
-          bs.blkcnt() = cmd->blockcnt;
-          if (bs.blkcnt() != cmd->blockcnt)
-            L4Re::throw_error(-L4_EINVAL, "Number of data blocks to transfer");
-          bs.blksize() = cmd->blocksize;
-          if (bs.blksize() != cmd->blocksize)
-            L4Re::throw_error(-L4_EINVAL, "Size of data blocks to transfer");
-          bs.sdma_buf_bndry() = Reg_blk_size::Bndry_512k; // only for SDMA
-          bs.write(this);
         }
 
       // XXX Timeout ...
@@ -689,6 +697,8 @@ Sdhci<TYPE>::cmd_submit(Cmd *cmd)
                 break;
           Reg_ds_addr(dma_addr).write(this);
         }
+
+      cmd_submit_set_block_size_and_count(cmd);
     }
 
   Reg_cmd_arg(cmd->arg).write(this);

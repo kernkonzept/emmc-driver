@@ -737,7 +737,7 @@ private:
     }
   };
 
-  /// 0x3c: Auto CMD12 Error Status
+  /// 0x3c: Auto CMD12 Error Status (uSDHC)
   struct Reg_autocmd12_err_status : public Reg<Autocmd12_err_status>
   {
     using Reg<Autocmd12_err_status>::Reg;
@@ -1334,6 +1334,9 @@ private:
   /** Return string containing controller capabilities. */
   std::string str_caps() const
   { return Reg_host_ctrl_cap(this).str_caps(); }
+
+  /** Helper for cmd_submit(): Set block size and block count. */
+  void cmd_submit_set_block_size_and_count(Cmd const *cmd);
 
   /** Submit command to controller. */
   void cmd_submit(Cmd *cmd);
