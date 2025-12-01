@@ -29,6 +29,8 @@ namespace Emmc {
 
 typedef std::function<void(bool)> Receive_irq;
 
+using Dma_addr = L4Re::Dma_space::Dma_addr;
+
 struct Drv_base
 {
   void stats_wait_start()
@@ -132,11 +134,10 @@ struct Drv : public Drv_base
   Receive_irq _receive_irq;             ///< IRQ receive function.
   Cmd_queue   _cmd_queue;               ///< Command queue.
 
-  L4Re::Dma_space::Dma_addr _bb_phys;   ///< Bounce buffer: DMA address.
+  Dma_addr _bb_phys;                    ///< Bounce buffer: DMA address.
   l4_addr_t _bb_virt = 0;               ///< Bounce buffer: virtual address.
   l4_size_t _bb_size = 0;               ///< Bounce buffer: size.
-  L4Re::Dma_space::Dma_addr _dma_limit = ~0ULL;
-                                        /// Largest device DMA-accessible address.
+  Dma_addr _dma_limit = ~0ULL;          /// Largest device DMA-accessible address.
 };
 
 }; // namespace Emmc

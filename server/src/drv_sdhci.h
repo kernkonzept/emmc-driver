@@ -1144,13 +1144,13 @@ private:
     void reset()
     { cxx::write_now(&word1, 0); cxx::write_now(&word0, 0); }
 
-    L4Re::Dma_space::Dma_addr get_addr() const
+    Dma_addr get_addr() const
     { return cxx::access_once(&word1); }
 
-    void set_addr(L4Re::Dma_space::Dma_addr addr)
+    void set_addr(Dma_addr addr)
     { cxx::write_now(&word1, addr); }
 
-    static L4Re::Dma_space::Dma_addr get_max_addr()
+    static Dma_addr get_max_addr()
     { return ~0U; }
   };
   static_assert(sizeof(Adma2_desc_32) == 8, "Size of Adma2_desc_32!");
@@ -1168,17 +1168,16 @@ private:
       cxx::write_now(&word2, 0);
     }
 
-    L4Re::Dma_space::Dma_addr get_addr() const
-    { return (L4Re::Dma_space::Dma_addr)cxx::access_once(&word2) << 32
-             | cxx::access_once(&word1); }
+    Dma_addr get_addr() const
+    { return Dma_addr{cxx::access_once(&word2)} << 32 | cxx::access_once(&word1); }
 
-    void set_addr(L4Re::Dma_space::Dma_addr addr)
+    void set_addr(Dma_addr addr)
     {
       cxx::write_now(&word1, addr & 0xffffffff);
       cxx::write_now(&word2, addr >> 32);
     }
 
-    static L4Re::Dma_space::Dma_addr get_max_addr()
+    static Dma_addr get_max_addr()
     { return ~0ULL; }
   };
   static_assert(sizeof(Adma2_desc_64) == 16, "Size of Adma2_desc_64!");
@@ -1336,16 +1335,15 @@ private:
   { return Reg_host_ctrl_cap(this).str_caps(); }
 
   /** Helper for cmd_submit(): Set transfer mode/command according to DMA. */
-  L4Re::Dma_space::Dma_addr cmd_submit_prepare_dma(Cmd *cmd,
-                                                   Reg_cmd_xfr_typ &xt,
-                                                   Reg_mix_ctrl &mc);
+  Dma_addr cmd_submit_prepare_dma(Cmd *cmd,
+                                  Reg_cmd_xfr_typ &xt, Reg_mix_ctrl &mc);
 
   /** Helper for cmd_submit(): Handle tuning. */
   void cmd_submit_handle_tuning(Cmd const *cmd,
                                 Reg_cmd_xfr_typ &xt, Reg_mix_ctrl &mc);
 
   /** Helper for cmd_submit(): Set DMA address. */
-  void cmd_submit_set_dma_addr(Cmd const *cmd, L4Re::Dma_space::Dma_addr dma_addr,
+  void cmd_submit_set_dma_addr(Cmd const *cmd, Dma_addr dma_addr,
                                 Reg_cmd_xfr_typ &xt, Reg_mix_ctrl &mc);
 
   /** Helper for cmd_submit(): Set block size and block count. */
@@ -1396,7 +1394,7 @@ private:
   // :::::::::::::::::::::::::::::
 
   Inout_buffer _adma2_desc_mem;         ///< Dataspace for descriptor memory.
-  L4Re::Dma_space::Dma_addr _adma2_desc_phys; ///< Physical address of ADMA2 descs.
+  Dma_addr _adma2_desc_phys;            ///< Physical address of ADMA2 descs.
   Adma2_desc_64 *_adma2_desc;           ///< ADMA2 descriptor list (32/64-bit).
   l4_addr_t _dma_offset = 0;            ///< DMA offset (bcm2835)
   Bcm2835_mbox *bcm2835_mbox = nullptr; ///< For iproc: SoC control over mailbox

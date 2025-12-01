@@ -424,11 +424,11 @@ Sdhci<TYPE>::cmd_wait_available(Cmd const *cmd, bool sleep)
  * Helper for cmd_submit(): Set transfer mode/command according to DMA.
  */
 template <Sdhci_type TYPE>
-L4Re::Dma_space::Dma_addr
+Dma_addr
 Sdhci<TYPE>::cmd_submit_prepare_dma(Cmd *cmd,
                                     Reg_cmd_xfr_typ &xt, Reg_mix_ctrl &mc)
 {
-  L4Re::Dma_space::Dma_addr dma_addr = ~0ULL;
+  Dma_addr dma_addr = ~0ULL;
 
   if (No_dma_during_setup
       && cmd->flags.has_data()
@@ -613,8 +613,7 @@ Sdhci<TYPE>::cmd_submit_handle_tuning(Cmd const *cmd,
  */
 template <Sdhci_type TYPE>
 void
-Sdhci<TYPE>::cmd_submit_set_dma_addr(Cmd const *cmd,
-                                     L4Re::Dma_space::Dma_addr dma_addr,
+Sdhci<TYPE>::cmd_submit_set_dma_addr(Cmd const *cmd, Dma_addr dma_addr,
                                      Reg_cmd_xfr_typ &xt, Reg_mix_ctrl &mc)
 {
   if (dma_adma2())
@@ -723,7 +722,7 @@ Sdhci<TYPE>::cmd_submit(Cmd *cmd)
       || cmd->cmd == Mmc::Cmd12_stop_transmission_wr)
     xt.cmdtyp() = Reg_cmd_xfr_typ::Cmd52_abort;
 
-  L4Re::Dma_space::Dma_addr dma_addr = cmd_submit_prepare_dma(cmd, xt, mc);
+  Dma_addr dma_addr = cmd_submit_prepare_dma(cmd, xt, mc);
 
   if (   cmd->cmd == Mmc::Cmd19_send_tuning_block
       || cmd->cmd == Mmc::Cmd21_send_tuning_block)
