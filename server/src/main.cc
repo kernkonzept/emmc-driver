@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020-2021, 2023-2024 Kernkonzept GmbH.
+ * Copyright (C) 2020-2021, 2023-2025 Kernkonzept GmbH.
  * Author(s): Frank Mehnert <frank.mehnert@kernkonzept.com>
  *            Sarah Hoffmann <sarah.hoffmann@kernkonzept.com>
  *            Jakub Jermar <jakub.jermar@kernkonzept.com>
