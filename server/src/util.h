@@ -89,7 +89,7 @@ struct Util
    */
   static l4_uint64_t read_tsc()
   {
-#if defined(ARCH_arm)
+#if defined(ARCH_arm) && defined(CONFIG_CPU_ARMV7PLUS)
     l4_uint64_t v;
     asm volatile("mrrc p15, 1, %Q0, %R0, c14" : "=r" (v));
     return v;
@@ -109,7 +109,7 @@ struct Util
   /// Returns 0 if no fine-grained clock available.
   static l4_uint64_t freq_tsc_hz()
   {
-#if defined(ARCH_arm)
+#if defined(ARCH_arm) && defined(CONFIG_CPU_ARMV7PLUS)
     return generic_timer_freq;
 #elif defined(ARCH_arm64)
     return generic_timer_freq;
@@ -123,7 +123,7 @@ struct Util
   /// Returns 0 if no fine-grained clock available.
   static l4_uint64_t tsc_to_us(l4_uint64_t tsc)
   {
-#if defined(ARCH_arm) || defined(ARCH_arm64)
+#if (defined(ARCH_arm) || defined(ARCH_arm64)) && defined(CONFIG_CPU_ARMV7PLUS)
     l4_uint64_t freq = freq_tsc_hz();
     return freq ? tsc * 1000000 / freq : 0;
 #elif defined(ARCH_x86)
@@ -153,7 +153,7 @@ struct Util
 
   static l4_uint64_t tsc_to_ms(l4_uint64_t tsc)
   {
-#if defined(ARCH_arm) || defined(ARCH_arm64)
+#if (defined(ARCH_arm) || defined(ARCH_arm64)) && defined(CONFIG_CPU_ARMV7PLUS)
     l4_uint64_t freq = freq_tsc_hz();
     return freq ? tsc * 1000 / freq : 0;
 #elif defined(ARCH_x86) || defined(ARCH_amd64)
@@ -168,7 +168,8 @@ struct Util
 #if defined(ARCH_x86) || defined(ARCH_amd64)
   static l4_uint32_t scaler_tsc_to_us;
   static l4_umword_t cpu_freq_khz;
-#elif defined(ARCH_arm) || defined(ARCH_arm64)
+#elif (defined(ARCH_arm) || defined(ARCH_arm64)) && defined(CONFIG_CPU_ARMV7PLUS)
+  // generic timer and MRCC instruction was introduced with ARMv7
   static l4_uint32_t generic_timer_freq;
 #endif
 };

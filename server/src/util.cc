@@ -18,7 +18,7 @@ static Dbg trace(Dbg::Trace, "util");
 #if defined(ARCH_x86) || defined(ARCH_amd64)
 l4_uint32_t Util::scaler_tsc_to_us;
 l4_umword_t Util::cpu_freq_khz;
-#elif defined(ARCH_arm) || defined(ARCH_arm64)
+#elif (defined(ARCH_arm) || defined(ARCH_arm64)) && defined(CONFIG_CPU_ARMV7PLUS)
 l4_uint32_t Util::generic_timer_freq;
 #endif
 bool Util::tsc_init_success;
@@ -64,7 +64,7 @@ Util::readable_freq(l4_uint32_t freq)
 void
 Util::tsc_init()
 {
-#if defined(ARCH_arm)
+#if defined(ARCH_arm) && defined(CONFIG_CPU_ARMV7PLUS)
 
   // Read from virtual counter of ARM generic timer.
   l4_uint32_t v;
