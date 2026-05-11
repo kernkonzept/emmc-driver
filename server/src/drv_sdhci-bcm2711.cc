@@ -65,6 +65,8 @@ Sdhci<Sdhci_type::Bcm2711>::init_platform(L4Re::Util::Shared_cap<L4Re::Dma_space
           _dma_limit = 0xffffffffULL; // XXX is this correct?
           break;
         case 0x13: // 400
+        case 0x14: // CM4
+        case 0x15: // CM4S
           _dma_offset = 0UL; // new revision
           _dma_limit = 0xffffffffULL; // XXX is this correct?
           break;
