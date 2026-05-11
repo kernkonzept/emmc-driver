@@ -146,6 +146,9 @@ private:
   bool is_read_only() const override
   { return false; }
 
+  bool supports_flush() const override
+  { return _has_cache; }
+
   bool match_hid(cxx::String const &hid) const override
   { return hid == cxx::String(_hid); }
 
