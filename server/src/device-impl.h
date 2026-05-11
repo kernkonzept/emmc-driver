@@ -415,6 +415,12 @@ template <class Driver>
 int
 Device<Driver>::flush(Block_device::Inout_callback const &cb)
 {
+  if (!_has_cache)
+    {
+      cb(L4_EOK, 0);
+      return L4_EOK;
+    }
+
   info.printf("\033[32mflush\033[m\n");
 
   Cmd *cmd = _drv.cmd_create();
@@ -1544,6 +1550,7 @@ Device<Driver>::power_up_mmc(Cmd *cmd)
     + ((l4_uint32_t)((l4_uint8_t volatile*)_ecsd.ec249_cache_size)[3] << 24);
   if (cache_size_kb)
     {
+      _has_cache = true;
       info.printf("Device has %s cache -- enabling.\n",
                   Util::readable_size(cache_size_kb << 10).c_str());
       Mmc::Reg_ecsd::Ec33_cache_ctrl cc(0);

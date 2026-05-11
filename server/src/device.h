@@ -327,6 +327,7 @@ private:
   Mmc::Reg_ecsd::Ec196_device_type _device_type_restricted;
   Mmc::Reg_ecsd::Ec196_device_type _device_type_selected;
   bool        _enh_strobe = false;
+  bool        _has_cache = false;  ///< true if the device reported a non-zero cache size
   l4_uint64_t _size_user = 0;   ///< size of the user partition in bytes
   l4_uint64_t _size_boot12 = 0; ///< size of the boot{1,2} partitions in bytes
   l4_uint64_t _size_rpmb = 0;   ///< size of the RPMB partition in bytes
