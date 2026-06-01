@@ -15,6 +15,7 @@
 #include <l4/vbus/vbus>
 #include <l4/vbus/vbus_pci>
 #include <l4/libblock-device/block_device_mgr.h>
+#include <l4/libblock-device/pm.h>
 #include <terminate_handler-l4>
 
 #include "device.h"
@@ -268,6 +269,7 @@ struct Client_opts
 
 static Block_device::Errand::Errand_server server;
 static Blk_mgr drv(server.registry());
+static Block_device::Pm_for_dm<Blk_mgr> pm(drv, "emmc-driver");
 static unsigned devices_in_scan = 0;
 static unsigned devices_found = 0;
 
@@ -519,6 +521,10 @@ main(int argc, char *const *argv)
     info.printf("Fine-grained clock not available!\n");
 
   Block_device::Errand::set_server_iface(&server);
+
+  if (!pm.init(L4Re::Env::env()->get_cap<L4Re::Inhibitor>("vbus")))
+    pm.register_obj(server.registry());
+
   setup_hardware();
 
   trace.printf("Entering server loop.\n");
