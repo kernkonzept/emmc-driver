@@ -192,7 +192,7 @@ public:
 
 private:
 
-  void receive_irq(bool is_data) const;
+  bool receive_irq(bool is_data) const;
 
   void init_done();
 

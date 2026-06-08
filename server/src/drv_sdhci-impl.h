@@ -798,8 +798,22 @@ Sdhci<TYPE>::cmd_wait_cmd_finished(Cmd *cmd, bool verbose)
   l4_uint64_t time = Util::read_tsc();
   while (cmd->status == Cmd::Progress_cmd)
     {
-      _receive_irq(false);
-      handle_irq_cmd(cmd, Reg_int_status(this));
+      bool irq_received = _receive_irq(false);
+      Reg_int_status is(this);
+      if (irq_received || is.raw != 0)
+        handle_irq_cmd(cmd, is);
+      else
+        {
+          // Timeout: Try to recover.
+          cmd->status = Cmd::Cmd_timeout;
+          Reg_sys_ctrl sc(this);
+          sc.rstc() = 1;
+          sc.rstd() = 1;
+          sc.write(this);
+          Util::poll(10000, [this] { return !Reg_sys_ctrl(this).rstc()
+                                         && !Reg_sys_ctrl(this).rstd(); },
+                     "Software reset for CMD line");
+        }
     }
   time = Util::read_tsc() - time;
   _time_sleep += time;

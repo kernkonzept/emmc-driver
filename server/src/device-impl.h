@@ -51,7 +51,7 @@ Device<Driver>::Device(int nr, l4_uint64_t mmio_addr, l4_uint64_t mmio_size,
                        Device_type_disable dt_disable)
 : Block_device::Device_dma_map_all_impl<Device<Driver>>(dma),
   _drv(nr, iocap, mmio_space, mmio_addr, mmio_size, dma, max_seg,
-       host_clock, [this](bool is_data) { receive_irq(is_data); }),
+       host_clock, [this](bool is_data) { return receive_irq(is_data); }),
   _irq_num(irq_num),
   _irq_mode(irq_mode),
   _icu(icu),
@@ -539,12 +539,13 @@ Device<Driver>::start_device_scan(Errand::Callback const &cb)
  * Actually this function is not used with the asynchronous handling.
  */
 template <class Driver>
-void
+bool
 Device<Driver>::receive_irq(bool is_data) const
 {
   constexpr l4_timeout_t timeout =
     l4_timeout(L4_IPC_TIMEOUT_NEVER, l4_timeout_from_us(Timeout_irq_us));
-  L4Re::chksys(l4_ipc_error(_irq->receive(timeout), l4_utcb()), "Receive IRQ.");
+
+  l4_msgtag_t tag = _irq->receive(timeout);
 
   if (trace.is_active())
     {
@@ -553,6 +554,8 @@ Device<Driver>::receive_irq(bool is_data) const
       else
         _drv.show_interrupt_status("Receive IRQ (cmd): got ");
     }
+
+  return !tag.has_error();
 }
 
 template <class Driver>
@@ -1227,7 +1230,7 @@ Device<Driver>::power_up_sd(Cmd *cmd)
               cmd->init_data(Mmc::Cmd6_switch_func, a6.raw, 64, _io_buf.pget(),
                              reinterpret_cast<l4_addr_t>(_io_buf.get<void>()));
               cmd_exec(cmd);
-              cmd->check_error("CMD6: SWITCH_FUCN/SET_POWER");
+              cmd->check_error("CMD6: SWITCH_FUNC/SET_POWER");
               if (sf.fun_sel_grp4() == sf.Invalid_function)
                 L4Re::throw_error(-L4_EINVAL, "Invalid function trying to set power");
             }
@@ -1271,7 +1274,9 @@ Device<Driver>::power_up_sd(Cmd *cmd)
               _device_type_disable.sd |= mmc_timing;
               info.printf("\033[31mTuning for mode '%s' failed!\033[m\n",
                           Mmc::str_timing(mmc_timing));
-              _drv.set_clock_and_timing(400 * KHz, Mmc::Legacy);
+              _drv.set_clock_and_timing(0, Mmc::Legacy);
+              _drv.reset_tuning();
+
               // Seems this doesn't work. Need to reset more state?
               continue;
             }

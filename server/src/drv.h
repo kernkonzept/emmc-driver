@@ -28,7 +28,7 @@
 
 namespace Emmc {
 
-typedef std::function<void(bool)> Receive_irq;
+typedef std::function<bool(bool)> Receive_irq;
 
 using Dma_addr = L4Re::Dma_space::Dma_addr;
 
