@@ -165,7 +165,10 @@ private:
   {
     l4_size_t sz = _drv.provided_bounce_buffer() ? _drv._bb_size
                                                  : _drv.max_inout_req_size();
-    return sz / _max_seg;
+    // The per-segment limit is advertised to the block frontend as size_max.
+    // It must be a multiple of the sector size, otherwise the frontend may
+    // split a request at a non-sector-aligned boundary ("Bad block size").
+    return (sz / _max_seg) & ~(l4_size_t{Sector_size} - 1);
   }
 
   /**
