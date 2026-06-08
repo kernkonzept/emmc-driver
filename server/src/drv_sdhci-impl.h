@@ -1407,7 +1407,10 @@ Sdhci<TYPE>::adma2_set_descs_mem_region(T *desc, l4_uint64_t phys,
       if (desc >= (T*)_adma2_desc + _adma2_desc_mem.size() / sizeof(T))
         L4Re::throw_error(-L4_EINVAL, "Too many ADMA2 descriptors");
       if (phys >= T::get_max_addr())
-        L4Re::throw_error(-L4_EINVAL, "Implement 64-bit ADMA2 mode");
+        L4Re::throw_error_fmt(
+          -L4_EINVAL,
+          "Descriptor for %llx/%x but controller doesn't support 64-bit ADMA2 mode",
+          phys, size);
       desc->reset();
       desc->valid() = 1;
       desc->act() = T::Act_tran;
