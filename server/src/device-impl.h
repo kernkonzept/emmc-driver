@@ -613,16 +613,9 @@ template <class Driver>
 void
 Device<Driver>::receive_irq(bool is_data) const
 {
-  struct Timeout
-  {
-    Timeout(l4_uint32_t timeout)
-    { l4_rcv_timeout(l4_timeout_from_us(timeout), &_timeout); }
-    l4_timeout_t timeout() const { return _timeout; }
-    l4_timeout_t _timeout = L4_IPC_NEVER_INITIALIZER;
-  };
-  static Timeout timeout(Timeout_irq_us);
-  L4Re::chksys(l4_ipc_error(_irq->receive(timeout.timeout()), l4_utcb()),
-               "Receive IRQ.");
+  constexpr l4_timeout_t timeout =
+    l4_timeout(L4_IPC_TIMEOUT_NEVER, l4_timeout_from_us(Timeout_irq_us));
+  L4Re::chksys(l4_ipc_error(_irq->receive(timeout), l4_utcb()), "Receive IRQ.");
 
   if (trace.is_active())
     {
