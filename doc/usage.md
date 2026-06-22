@@ -329,51 +329,46 @@ eMMC driver using the Virtio block protocol.
 A couple of examples on how to request different disks or partitions are listed
 below.
 
-* Request the whole eMMC device
+* **Request the whole eMMC device**
 
-Assume the eMMC server reported the following PSN number (running in QEMU):
+  Assume the eMMC server reported the following PSN number (running in QEMU):
+  ```
+  eMMC-0[device]: product: 'QEMU!', manufactured 2/2006, mid=aa, psn=deadbeef
+  ```
 
-```
-eMMC-0[device]: product: 'QEMU!', manufactured 2/2006, mid=aa, psn=deadbeef
-```
+  A client can connect to this disk via:
+  ```lua
+  vda1 = emmc_bus:create(0, "ds-max=5", "device=deadbeef")
+  ```
 
-A client can connect to this disk via:
+* **Request a partition using a partition number**
 
-```lua
-vda1 = emmc_bus:create(0, "ds-max=5", "device=deadbeef"
-```
+  Assume the eMMC server reported the following PSN number (running in QEMU):
+  ```
+  eMMC-0[device]: product: 'QEMU!', manufactured 2/2006, mid=aa, psn=deadbeef
+  ```
 
-* Request a partition using a partition number
+  A client can connect to partition 2 on this device like this:
+  ```lua
+  vda1 = emmc_bus:create(0, "ds-max=5", "device=deadbeef:2")
+  ```
 
-Assume the eMMC server reported the following PSN number (running in QEMU):
+* **Request a partition with the given UUID**
 
-```
-eMMC-0[device]: product: 'QEMU!', manufactured 2/2006, mid=aa, psn=deadbeef
-```
+  ```lua
+  vda1 = emmc_bus:create(0, "ds-max=5", "device=partuuid:AFFA05B0-9379-480E-B9C6-5FF57FB1D194")
+  ```
 
-A client can connect to partition 2 on this device like this:
+* **Request a partition using a label**
 
-```lua
-vda1 = emmc_bus:create(0, "ds-max=5", "device=deadbeef:2"
-```
+  Assume there is a partition with label 'foobar'. A client can connect to it
+  using the following snippet:
+  ```lua
+  vda1 = emmc_bus:create(0, "ds-max=5", "device=partlabel:foobar")
+  ```
 
-* Request a partition with the given UUID
-
-```lua
-vda1 = emmc_bus:create(0, "ds-max=5", "device=partuuid:AFFA05B0-9379-480E-B9C6-5FF57FB1D194")
-```
-
-* Request a partition using a label
-
-Assume there is a partition with label 'foobar'. A client can connect to it
-using the following snippet:
-
-```lua
-vda1 = emmc_bus:create(0, "ds-max=5", "device=partlabel:foobar")
-```
-
-* A more elaborate example with a static client. The client uses the client side
-of the `emmc_cl1` capability to communicate with the eMMC driver.
+* **A more elaborate example with a static client.** The client uses the client
+side of the `emmc_cl1` capability to communicate with the eMMC driver.
 
   ```lua
   local emmc_cl1 = L4.default_loader:new_channel();
@@ -387,12 +382,12 @@ of the `emmc_cl1` capability to communicate with the eMMC driver.
   }, "rom/emmc-drv --client cl1 --device 88E59675-4DC8-469A-98E4-B7B021DC7FBE --ds-max 5");
   ```
 
-* Accessing a device from QEMU:
+* **Accessing a device from QEMU**
 
   The file `pcie-ecam.io` contains an IO config file which is able to use the
   QEMU PCI controller to search for attached eMMC devices.
 
-* eMMC emulation with QEMU:
+* **eMMC emulation with QEMU**
 
   The attached patch extends QEMU SD card emulation to emulate eMMC devices.
   After applying the patch and recompiling QEMU, attach the following parameters
