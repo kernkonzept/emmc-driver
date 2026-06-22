@@ -3,6 +3,9 @@
 [comment]: # (This is a generated file. Do not change it.)
 [comment]: # (Instead, change capdb.yml.)
 
+
+## Description {#l4re_servers_emmc_driver_description}
+
 The eMMC driver is a driver for PCI Express eMMC controllers.
 
 ## Starting the service
@@ -40,7 +43,8 @@ The eMMC driver supports SDHCI and SDHI controllers, in particular
 `doc/qemu-patch.diff`).
 
 
-## Capabilities
+<hr>
+## Capabilities {#l4re_servers_emmc_driver_capabilities}
 
 * `vbus`
 
@@ -85,7 +89,8 @@ The eMMC driver supports SDHCI and SDHI controllers, in particular
   Mandatory capability.
 
 
-## Command Line Options
+<hr>
+## Command Line Options {#l4re_servers_emmc_driver_cmdline_options}
 
 In the example above the eMMC driver is started in its default configuration. To
 customize the configuration of the eMMC driver it accepts the following command
@@ -187,7 +192,7 @@ line options:
 
     Flag. True if provided.
 
-## Virtio block host
+## Virtio block host {#l4re_servers_emmc_driver_param_virtio_block_host}
 
 Prior to connecting a client to a virtual block session it has to be created
 using the following Lua function. It has to be called on the client side of the
@@ -253,7 +258,8 @@ eMMC driver using the Virtio block protocol.
 
 
 
-## Examples
+<hr>
+## Examples {#l4re_servers_emmc_driver_examples}
 
 A couple of examples on how to request different disks or partitions are listed
 below.
