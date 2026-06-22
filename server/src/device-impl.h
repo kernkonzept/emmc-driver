@@ -445,6 +445,10 @@ Device<Driver>::flush(Block_device::Inout_callback const &cb)
   catch (L4::Runtime_error const &e)
     {
       warn.printf("flush fails: %s: %s.\n", e.str(), e.extra_str());
+
+      cmd->work_done();
+      cmd->destruct();
+
       return -L4_EINVAL;
     }
 
@@ -557,6 +561,8 @@ Device<Driver>::start_device_scan(Errand::Callback const &cb)
         {
           _drv.dump();
           warn.printf("%s: %s. Skipping.\n", e.str(), e.extra_str());
+          cmd->work_done();
+          cmd->destruct();
           failed = true;
         }
 
