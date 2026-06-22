@@ -358,11 +358,12 @@ Device<Driver>::inout_data(l4_uint64_t sector,
                            Block_device::Inout_callback const &cb,
                            L4Re::Dma_space::Direction dir)
 {
+  Cmd *cmd = _drv.cmd_create();
+  if (!cmd)
+    return -L4_EBUSY;
+
   try
     {
-      Cmd *cmd = _drv.cmd_create();
-      if (!cmd)
-        return -L4_EBUSY;
       cmd->cb_io = cb;
 
       bool inout_read = dir == L4Re::Dma_space::Direction::From_device;
@@ -402,6 +403,11 @@ Device<Driver>::inout_data(l4_uint64_t sector,
   catch (L4::Runtime_error const &e)
     {
       warn.printf("inout_data fails: %s: %s.\n", e.str(), e.extra_str());
+
+      cmd->work_done();
+      cmd->destruct();
+      cmd_queue_kick();
+
       // -L4_EBUSY is only appropriate in certain cases (for example, there is
       // currently no free command slot), therefore rather enforce an IO error.
       return -L4_EINVAL;
