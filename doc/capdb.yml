@@ -55,6 +55,19 @@ cmds:
     short: 'q'
     desc: This option enables the quiet mode. All output is silenced.
     type: flag
+  - name: 'register-ds'
+    short: 'd'
+    metavar: 'cap_name'
+    desc: |
+      This option registers a trusted dataspace capability. If this option
+      gets used, it is not possible to communicate to the driver via dataspaces
+      other than the registered ones. Can be used multiple times for
+      multiple dataspaces.
+
+      The option's parameter is the name of a dataspace capability.
+    type: cap
+    cap-name: 'dataspace'
+    multiple: true
   - name: 'disable-mode'
     metavar: 'mode'
     desc: |

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020-2021, 2023-2025 Kernkonzept GmbH.
+ * Copyright (C) 2020-2021, 2023-2026 Kernkonzept GmbH.
  * Author(s): Frank Mehnert <frank.mehnert@kernkonzept.com>
  *            Sarah Hoffmann <sarah.hoffmann@kernkonzept.com>
  *            Jakub Jermar <jakub.jermar@kernkonzept.com>
@@ -8,6 +8,8 @@
  */
 
 #include <getopt.h>
+
+#include <map>
 
 #include <l4/sys/factory>
 #include <l4/vbus/vbus>
@@ -56,7 +58,11 @@ static char const *usage_str =
 " --max-seg NUM        Specify maximum number of segments one vio request can have\n"
 " --readonly           Only allow read-only access to the device\n"
 " --dma-map-all        Map the entire client dataspace permanently (default)\n"
-" --dma-map-per-req    Map/unmap client dataspace per request\n";
+" --dma-map-per-req    Map/unmap client dataspace per request\n"
+" --register-ds CAP    Register a trusted dataspace capability\n";
+
+using Ds_vector = std::vector<L4::Cap<L4Re::Dataspace>>;
+static std::shared_ptr<Ds_vector> trusted_dataspaces;
 
 class Blk_mgr
 : public Emmc::Base_device_mgr,
@@ -142,7 +148,8 @@ public:
           pd->set_dma_map_all(dma_map_all);
         else
           b->set_dma_map_all(dma_map_all);
-      });
+      },
+      !trusted_dataspaces->empty(), trusted_dataspaces);
     if (ret >= 0)
       {
         res = L4::Ipc::make_cap(cap, L4_CAP_FPAGE_RWSD);
@@ -245,7 +252,8 @@ struct Client_opts
              pd->set_dma_map_all(map_all);
            else
              b->set_dma_map_all(map_all);
-         });
+         },
+         !trusted_dataspaces->empty(), trusted_dataspaces);
       }
 
     return true;
@@ -288,6 +296,7 @@ parse_args(int argc, char *const *argv)
     { "quiet",          no_argument,            NULL,   'q' },
     { "disable-mode",   required_argument,      NULL,   OPT_DISABLE_MODE },
     { "max-seg",        required_argument,      NULL,   OPT_MAX_SEG },
+    { "register-ds",    required_argument,      NULL,   'd'},
 
     // per-client options
     { "client",          required_argument,      NULL,   OPT_CLIENT },
@@ -302,7 +311,7 @@ parse_args(int argc, char *const *argv)
   Client_opts opts;
   for (;;)
     {
-      int opt = getopt_long(argc, argv, "vq", loptions, NULL);
+      int opt = getopt_long(argc, argv, "vqd:", loptions, NULL);
       if (opt == -1)
         {
           if (optind < argc)
@@ -323,6 +332,14 @@ parse_args(int argc, char *const *argv)
         case 'q':
           debug_level = 0;
           break;
+        case 'd':
+          {
+            L4::Cap<L4Re::Dataspace> ds =
+              L4Re::chkcap(L4Re::Env::env()->get_cap<L4Re::Dataspace>(optarg),
+                           "Find a dataspace capability.\n");
+            trusted_dataspaces->push_back(ds);
+            break;
+          }
         case OPT_DISABLE_MODE:
           // ==================
           // === eMMC modes ===
@@ -485,6 +502,8 @@ int
 main(int argc, char *const *argv)
 {
   Dbg::set_level(3);
+
+  trusted_dataspaces = std::make_shared<Ds_vector>();
 
   if (int arg_idx = parse_args(argc, argv) < 0)
     return arg_idx;

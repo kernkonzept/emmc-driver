@@ -110,6 +110,18 @@ line options:
 
   Flag. True if provided.
 
+* `-d <cap_name>`, `--register-ds <cap_name>`
+
+  This option registers a trusted dataspace capability. If this option gets
+  used, it is not possible to communicate to the driver via dataspaces other
+  than the registered ones. Can be used multiple times for multiple dataspaces.
+
+  The option's parameter is the name of a dataspace capability.
+
+  Can be used multiple times.
+
+  Name of a provided capability that adheres to the  protocol.
+
 * `--disable-mode <mode>`
 
   This option allows to disable certain eMMC/SD card modes from autodetection.
