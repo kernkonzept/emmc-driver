@@ -20,7 +20,7 @@ desc: |
 
   First, an IPC gate (`emmc_bus`) is created which is used between the eMMC
   driver and a client to request access to a particular disk or partition. The
-  server side is assigned to the mandatory `svr` capability of the eMMC driver.
+  server side is assigned to the optional `svr` capability of the eMMC driver.
   See the section below on how to configure access to a disk or partition.
 
   The eMMC driver needs access to a virtual bus capability (`vbus`). On the
@@ -166,7 +166,12 @@ caps:
       If this capability is not provided, the driver will allocate an
       arbitrary page.
     protocol: 'dataspace'
-server-cap-name: svr
+  - name: 'svr'
+    desc: |
+      Server capability providing clients access to a factory interface for
+      creating dynamic clients.
+    factory: true
+    mandatory: false
 factory:
   - obj-type: '0'
     return-type: Virtio_block_host

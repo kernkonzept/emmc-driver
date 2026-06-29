@@ -24,7 +24,7 @@ L4.default_loader:start({
 
 First, an IPC gate (`emmc_bus`) is created which is used between the eMMC driver
 and a client to request access to a particular disk or partition. The server
-side is assigned to the mandatory `svr` capability of the eMMC driver. See the
+side is assigned to the optional `svr` capability of the eMMC driver. See the
 section below on how to configure access to a disk or partition.
 
 The eMMC driver needs access to a virtual bus capability (`vbus`). On the
@@ -84,9 +84,8 @@ The eMMC driver supports SDHCI and SDHI controllers, in particular
 
 * `svr`
 
-  Server Capability of application. Endpoint for IPC calls
-
-  Mandatory capability.
+  Server capability providing clients access to a factory interface for creating
+  dynamic clients.
 
 
 <hr>
