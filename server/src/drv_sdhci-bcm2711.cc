@@ -128,7 +128,7 @@ struct F_sdhci_iproc : Factory
              icu, dma, registry, host_clock, max_seg, dt_disable, flags);
   }
 
-  l4_uint32_t guess_clock(l4_uint64_t mmio_addr) override
+  l4_uint32_t guess_host_clock_freq(l4_uint64_t mmio_addr) override
   {
     switch (mmio_addr)
       {

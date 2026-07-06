@@ -124,7 +124,7 @@ Factory::create_dma_space(L4::Cap<L4vbus::Vbus> bus, long unsigned id)
 
 // Default implementation.
 l4_uint32_t
-Factory::guess_clock(l4_uint64_t)
+Factory::guess_host_clock_freq(l4_uint64_t)
 { return 0; }
 
 cxx::Ref_ptr<Emmc::Base_device>
@@ -190,12 +190,13 @@ Factory::create_dev(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
 
 
   // XXX
-  l4_uint32_t host_clock = 400000;
-  if (l4_uint32_t guessed_clock = factory->guess_clock(mmio_addr))
-    host_clock = guessed_clock;
+  l4_uint32_t host_clock_freq = 400'000;
+  if (l4_uint32_t guessed_host_clock_freq
+      = factory->guess_host_clock_freq(mmio_addr))
+    host_clock_freq = guessed_host_clock_freq;
 
-  warn.printf("\033[33mAssuming host clock of %s.\033[m\n",
-              Util::readable_freq(host_clock).c_str());
+  warn.printf("\033[33mAssuming host clock frequency of %s.\033[m\n",
+              Util::readable_freq(host_clock_freq).c_str());
 
   try
     {
@@ -203,8 +204,8 @@ Factory::create_dev(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
       auto dma = create_dma_space(bus, id);
 
       return factory->create(device_nr++, mmio_addr, mmio_size, iocap, irq_num,
-                             irq_mode, icu, dma, registry, host_clock, max_seg,
-                             dt_disable, flags);
+                             irq_mode, icu, dma, registry, host_clock_freq,
+                             max_seg, dt_disable, flags);
     }
   catch (L4::Runtime_error const &e)
     {

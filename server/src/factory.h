@@ -113,11 +113,11 @@ public:
            L4::Cap<L4Re::Dataspace> iocap, int irq_num, L4_irq_mode irq_mode,
            L4::Cap<L4::Icu> icu,
            L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
-           L4Re::Util::Object_registry *registry, l4_uint32_t host_clock,
+           L4Re::Util::Object_registry *registry, l4_uint32_t host_clock_freq,
            unsigned max_seg, Device_type_disable dt_disable,
            Device_flags flags) = 0;
 
-  virtual l4_uint32_t guess_clock(l4_uint64_t mmio_addr);
+  virtual l4_uint32_t guess_host_clock_freq(l4_uint64_t mmio_addr);
 
   virtual ~Factory() = 0;
 

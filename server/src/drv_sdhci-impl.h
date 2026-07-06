@@ -26,7 +26,7 @@ Sdhci<TYPE>::Sdhci(int nr,
                    L4::Cap<L4Re::Mmio_space> mmio_space,
                    l4_uint64_t mmio_base, l4_uint64_t mmio_size,
                    L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
-                   unsigned max_seg, l4_uint32_t host_clock,
+                   unsigned max_seg, l4_uint32_t host_clock_freq,
                    Receive_irq receive_irq, Device_flags flags)
 : Drv<Sdhci<TYPE>>(iocap, mmio_space, mmio_base, mmio_size, receive_irq, flags),
   _adma2_desc_mem("sdhci_adma_buf", adma2_desc_mem_size(max_seg),
@@ -34,7 +34,7 @@ Sdhci<TYPE>::Sdhci(int nr,
                   L4Re::Rm::F::Cache_uncached),
   _adma2_desc_phys(_adma2_desc_mem.pget()),
   _adma2_desc(_adma2_desc_mem.get<Adma2_desc_64>()),
-  _host_clock(host_clock),
+  _host_clock_freq(host_clock_freq),
   warn(Dbg::Warn, "sdhci", nr),
   info(Dbg::Info, "sdhci", nr),
   trace(Dbg::Trace, "sdhci", nr),
@@ -57,11 +57,11 @@ Sdhci<TYPE>::Sdhci(int nr,
         {
           Reg_sys_ctrl sc(this);
 
-          _host_clock = 1'000'000 * cap1.base_freq();
-          l4_uint32_t sd_clock = _host_clock / sc.clock_base_divider10();
+          _host_clock_freq = 1'000'000 * cap1.base_freq();
+          l4_uint32_t sd_clock = _host_clock_freq / sc.clock_base_divider10();
           _write_delay = (4'000'000 + sd_clock - 1) / sd_clock;
           warn.printf("\033[33mActually using host clock of %s.\033[m\n",
-                      Util::readable_freq(_host_clock).c_str());
+                      Util::readable_freq(_host_clock_freq).c_str());
         }
     }
 
@@ -1057,11 +1057,11 @@ Sdhci<TYPE>::set_clock(l4_uint32_t freq)
 
         // Version 3.00: divisors are 10-bit and a multiple of 2.
         l4_uint32_t div;
-        if (_host_clock <= freq)
+        if (_host_clock_freq <= freq)
           div = 1;
         else
           for (div = 2; div < 2046; div += 2)
-            if ((_host_clock / div) <= freq)
+            if ((_host_clock_freq / div) <= freq)
               break;
         div >>= 1;
 
@@ -1084,7 +1084,7 @@ Sdhci<TYPE>::set_clock(l4_uint32_t freq)
 
         info.printf("\033[33mSet clock to %s%s (host=%s, divider=%d).\033[m\n",
                     Util::readable_freq(freq).c_str(), _ddr_active ? " (DDR)" : "",
-                    Util::readable_freq(_host_clock).c_str(),
+                    Util::readable_freq(_host_clock_freq).c_str(),
                     sc.clock_base_divider10());
         break;
       }
@@ -1102,9 +1102,11 @@ Sdhci<TYPE>::set_clock(l4_uint32_t freq)
         l4_uint32_t ddr_pre_div = _ddr_active ? 2 : 1;
         l4_uint32_t pre_div = 1;
         l4_uint32_t div = 1;
-        while (_host_clock / (16 * pre_div * ddr_pre_div) > freq && pre_div < 256)
+        while (_host_clock_freq / (16 * pre_div * ddr_pre_div)
+               > freq && pre_div < 256)
           pre_div <<= 1;
-        while (_host_clock / (div * pre_div * ddr_pre_div) > freq && div < 16)
+        while (_host_clock_freq / (div * pre_div * ddr_pre_div)
+               > freq && div < 16)
           ++div;
         pre_div >>= 1;
         --div;
@@ -1119,7 +1121,7 @@ Sdhci<TYPE>::set_clock(l4_uint32_t freq)
 
         info.printf("\033[33mSet clock to %s%s (host=%s, divider=%d).\033[m\n",
                     Util::readable_freq(freq).c_str(), _ddr_active ? " (DDR)" : "",
-                    Util::readable_freq(_host_clock).c_str(),
+                    Util::readable_freq(_host_clock_freq).c_str(),
                     _ddr_active ? sc.clock_divider_ddr() : sc.clock_divider_sdr());
         break;
       }

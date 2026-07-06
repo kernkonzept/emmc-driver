@@ -1217,7 +1217,7 @@ public:
                  L4::Cap<L4Re::Mmio_space> mmio_space,
                  l4_uint64_t mmio_base, l4_uint64_t mmio_size,
                  L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
-                 unsigned max_seg, l4_uint32_t host_clock,
+                 unsigned max_seg, l4_uint32_t host_clock_freq,
                  Receive_irq receive_irq, Device_flags flags);
 
   ~Sdhci();
@@ -1436,7 +1436,7 @@ private:
   Bcm2835_mbox *bcm2835_mbox = nullptr; ///< For iproc: SoC control over mailbox
   bool _ddr_active = false;             ///< True if double-data timing.
   bool _adma2_64 = false;               ///< True if 64-bit ADMA2.
-  l4_uint32_t _host_clock;              ///< Reference clock frequency.
+  l4_uint32_t _host_clock_freq;         ///< Reference clock frequency.
 
   Dbg warn;
   Dbg info;
