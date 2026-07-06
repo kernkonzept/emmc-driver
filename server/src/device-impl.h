@@ -99,11 +99,12 @@ Device<Driver>::Device(int nr, l4_uint64_t mmio_addr, l4_uint64_t mmio_size,
 
   claim_bounce_buffer("bbds");
 
-  info.printf("\033[33mMax size per segment %s%s, max segments %u.\033[m\n",
+  const bool limited_by_bb =
+    _drv.provided_bounce_buffer()
+    && _drv.bounce_buffer_size() < _drv.max_inout_req_size();
+  info.printf("\033[33mMax segment size %s%s, max segments %u.\033[m\n",
               Util::readable_size(max_size()).c_str(),
-              max_size() < _drv.max_inout_req_size() / max_seg
-                ? " (limited by bounce buffer / max_seg)" : "",
-              max_seg);
+              limited_by_bb ? " (limited by bounce buffer)" : "", max_seg);
 }
 
 template <class Driver>
