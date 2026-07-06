@@ -61,7 +61,7 @@ Sdhci<TYPE>::Sdhci(int nr,
           l4_uint32_t sd_clock = _host_clock / sc.clock_base_divider10();
           _write_delay = (4'000'000 + sd_clock - 1) / sd_clock;
           warn.printf("\033[33mActually using host clock of %s.\033[m\n",
-              Util::readable_freq(host_clock).c_str());
+                      Util::readable_freq(_host_clock).c_str());
         }
     }
 
