@@ -53,18 +53,23 @@ struct Device_type_nopci : public cxx::H_list_item_t<Device_type_nopci>
 {
   char const *compatible;
   Factory *f;
+  Device_flags flags;
 
-  Device_type_nopci(char const *compatible, Factory *f)
-  : compatible(compatible), f(f)
+  Device_type_nopci(char const *compatible, Factory *f,
+                    Device_flags flags = Device_flags::None)
+  : compatible(compatible), f(f), flags(flags)
   {
     types.push_front(this);
   }
 
-  static Factory *find(L4vbus::Pci_dev const &dev)
+  static Factory *find(L4vbus::Pci_dev const &dev, Device_flags &flags)
   {
     for (auto const *t : types)
       if (dev.is_compatible(t->compatible) == 1)
-        return t->f;
+        {
+          flags = t->flags;
+          return t->f;
+        }
 
     return nullptr;
   }
@@ -76,18 +81,23 @@ struct Device_type_pci : public cxx::H_list_item_t<Device_type_pci>
 {
   l4_uint32_t class_code;
   Factory *f;
+  Device_flags flags;
 
-  Device_type_pci(l4_uint32_t class_code, Factory *f)
-  : class_code(class_code), f(f)
+  Device_type_pci(l4_uint32_t class_code, Factory *f,
+                  Device_flags flags = Device_flags::None)
+  : class_code(class_code), f(f), flags(flags)
   {
     types.push_front(this);
   }
 
-  static Factory *find(l4_uint32_t class_code)
+  static Factory *find(l4_uint32_t class_code, Device_flags &flags)
   {
     for (auto const *t : types)
       if (class_code == t->class_code)
-        return t->f;
+        {
+          flags = t->flags;
+          return t->f;
+        }
 
     return nullptr;
   }
@@ -104,7 +114,8 @@ public:
            L4::Cap<L4::Icu> icu,
            L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
            L4Re::Util::Object_registry *registry, l4_uint32_t host_clock,
-           unsigned max_seg, Device_type_disable dt_disable) = 0;
+           unsigned max_seg, Device_type_disable dt_disable,
+           Device_flags flags) = 0;
 
   virtual l4_uint32_t guess_clock(l4_uint64_t mmio_addr);
 

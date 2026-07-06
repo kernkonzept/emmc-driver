@@ -34,12 +34,12 @@ struct F_sdhci_plain : Factory
          L4::Cap<L4Re::Dataspace> iocap, int irq_num, L4_irq_mode irq_mode,
          L4::Cap<L4::Icu> icu, L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
          L4Re::Util::Object_registry *registry, l4_uint32_t host_clock,
-         unsigned max_seg, Device_type_disable dt_disable)
+         unsigned max_seg, Device_type_disable dt_disable, Device_flags flags)
   {
     L4::Cap<L4Re::Mmio_space> mmio_space;
     return cxx::make_ref_obj<Device<Sdhci<Sdhci_type::Plain>>>(
              nr, mmio_addr, mmio_size, iocap, mmio_space, irq_num, irq_mode,
-             icu, dma, registry, host_clock, max_seg, dt_disable);
+             icu, dma, registry, host_clock, max_seg, dt_disable, flags);
   }
 };
 

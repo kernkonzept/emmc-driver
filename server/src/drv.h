@@ -32,6 +32,17 @@ typedef std::function<bool(bool)> Receive_irq;
 
 using Dma_addr = L4Re::Dma_space::Dma_addr;
 
+enum Device_flags : l4_uint32_t
+{
+  None = 0,
+};
+
+constexpr Device_flags operator|(Device_flags lhs, Device_flags rhs)
+{
+  return static_cast<Device_flags>(static_cast<l4_uint32_t>(lhs)
+                                   | static_cast<l4_uint32_t>(rhs));
+}
+
 class Drv_base
 {
 public:
@@ -88,8 +99,9 @@ public:
   explicit Drv(L4::Cap<L4Re::Dataspace> iocap,
                L4::Cap<L4Re::Mmio_space> mmio_space,
                l4_uint64_t mmio_base, l4_uint64_t mmio_size,
-               Receive_irq receive_irq)
-  : _regs(mmio_space.is_valid()
+               Receive_irq receive_irq, Device_flags flags)
+  : _flags(flags),
+    _regs(mmio_space.is_valid()
             ? Hw_regs(new Hw::Mmio_space_register_block<32>(
                             mmio_space, mmio_base, mmio_size))
             : Hw_regs(new Hw::Mmio_map_register_block<32>(
@@ -157,6 +169,8 @@ public:
   {}
 
 protected:
+  Device_flags _flags;
+
   Hw_regs     _regs;                    ///< Controller MMIO registers.
   Receive_irq _receive_irq;             ///< IRQ receive function.
   Cmd_queue   _cmd_queue;               ///< Command queue.

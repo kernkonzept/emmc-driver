@@ -143,6 +143,7 @@ Factory::create_dev(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
 
   bool is_pcidev
     = l4vbus_subinterface_supported(dev_info.type, L4VBUS_INTERFACE_PCIDEV);
+  Device_flags flags = Device_flags::None;
   if (is_pcidev)
     {
       l4_uint32_t vendor_device = 0;
@@ -153,14 +154,14 @@ Factory::create_dev(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
       L4Re::chksys(dev.cfg_read(8, &class_code, 32));
       class_code >>= 8;
 
-      if (!(factory = Device_type_pci::find(class_code)))
+      if (!(factory = Device_type_pci::find(class_code, flags)))
         return nullptr;
 
       pci_dev(dev, mmio_addr, mmio_size, irq_num, irq_mode);
     }
   else
     {
-      if (!(factory = Device_type_nopci::find(dev)))
+      if (!(factory = Device_type_nopci::find(dev, flags)))
         return nullptr;
 
       if (!nopci_dev(dev, dev_info, mmio_addr, mmio_size, irq_num, irq_mode))
@@ -203,7 +204,7 @@ Factory::create_dev(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
 
       return factory->create(device_nr++, mmio_addr, mmio_size, iocap, irq_num,
                              irq_mode, icu, dma, registry, host_clock, max_seg,
-                             dt_disable);
+                             dt_disable, flags);
     }
   catch (L4::Runtime_error const &e)
     {

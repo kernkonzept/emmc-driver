@@ -26,9 +26,9 @@ Sdhci<TYPE>::Sdhci(int nr,
                    L4::Cap<L4Re::Mmio_space> mmio_space,
                    l4_uint64_t mmio_base, l4_uint64_t mmio_size,
                    L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
-                   unsigned max_seg,
-                   l4_uint32_t host_clock, Receive_irq receive_irq)
-: Drv<Sdhci<TYPE>>(iocap, mmio_space, mmio_base, mmio_size, receive_irq),
+                   unsigned max_seg, l4_uint32_t host_clock,
+                   Receive_irq receive_irq, Device_flags flags)
+: Drv<Sdhci<TYPE>>(iocap, mmio_space, mmio_base, mmio_size, receive_irq, flags),
   _adma2_desc_mem("sdhci_adma_buf", adma2_desc_mem_size(max_seg),
                   dma, L4Re::Dma_space::Direction::To_device,
                   L4Re::Rm::F::Cache_uncached),

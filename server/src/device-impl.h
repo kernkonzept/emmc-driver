@@ -48,10 +48,10 @@ Device<Driver>::Device(int nr, l4_uint64_t mmio_addr, l4_uint64_t mmio_size,
                        L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
                        L4Re::Util::Object_registry *registry,
                        l4_uint32_t host_clock, unsigned max_seg,
-                       Device_type_disable dt_disable)
+                       Device_type_disable dt_disable, Device_flags flags)
 : Block_device::Device_dma_map_all_impl<Device<Driver>>(dma),
   _drv(nr, iocap, mmio_space, mmio_addr, mmio_size, dma, max_seg,
-       host_clock, [this](bool is_data) { return receive_irq(is_data); }),
+       host_clock, [this](bool is_data) { return receive_irq(is_data); }, flags),
   _irq_num(irq_num),
   _irq_mode(irq_mode),
   _icu(icu),

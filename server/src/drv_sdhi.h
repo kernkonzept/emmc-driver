@@ -34,7 +34,8 @@ public:
                 L4::Cap<L4Re::Mmio_space> mmio_space,
                 l4_uint64_t mmio_base, l4_uint64_t mmio_size,
                 L4Re::Util::Shared_cap<L4Re::Dma_space> const &,
-                unsigned max_seg, l4_uint32_t, Receive_irq receive_irq);
+                unsigned max_seg, l4_uint32_t, Receive_irq receive_irq,
+                Device_flags flags);
 
   l4_size_t max_inout_req_size() const
   { return 4 << 20; } // kind of arbitrary

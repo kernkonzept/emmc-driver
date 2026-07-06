@@ -135,7 +135,7 @@ public:
          L4Re::Util::Shared_cap<L4Re::Dma_space> const &dma,
          L4Re::Util::Object_registry *registry,
          l4_uint32_t host_clock, unsigned max_seg,
-         Device_type_disable dt_disable);
+         Device_type_disable dt_disable, Device_flags flags);
 
   void handle_irq();
 
