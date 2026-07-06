@@ -347,9 +347,6 @@ private:
   Inout_buffer _io_buf;
   Mmc::Reg_ecsd const &_ecsd;
 
-  /// Bounce buffer.
-  L4Re::Rm::Unique_region<l4_addr_t> _bb_region;
-
   /// Statistics
   l4_cpu_time_t _init_time = 0;
   l4_cpu_time_t _stat_time = 0;

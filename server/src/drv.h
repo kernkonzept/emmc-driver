@@ -21,6 +21,7 @@
 #include <l4/re/mmio_space>
 
 #include "cmd.h"
+#include "debug.h"
 #include "mmc.h"
 #include "mmio.h"
 #include "util.h"
@@ -40,6 +41,26 @@ struct Drv_base
   { _time_sleep += Util::read_tsc(); }
 
   void delay(unsigned ms);
+
+  /** Attach the provided bounce buffer. */
+  void setup_bounce_buffer(L4::Cap<L4Re::Dataspace> cap,
+                           L4Re::Util::Shared_cap<L4Re::Dma_space> dma,
+                           unsigned max_seg, Dbg const &dbg);
+
+  /** Return true if a bounce buffer was provided for this driver instance. */
+  bool provided_bounce_buffer() const
+  { return _bb_size != 0; }
+
+  /** Return true if this memory region is accessible by the DMA engine. */
+  bool dma_accessible(l4_uint64_t dma_addr, l4_size_t size)
+  { return dma_addr <= _dma_limit && dma_addr + size - 1 <= _dma_limit; }
+
+  L4Re::Rm::Unique_region<l4_addr_t> _bb_region; ///< Bounce buffer: region.
+  Dma_addr  _bb_phys;                  ///< Bounce buffer: DMA address.
+  l4_addr_t _bb_virt = 0;              ///< Bounce buffer: virtual address.
+  l4_size_t _bb_size = 0;              ///< Bounce buffer: size.
+
+  Dma_addr _dma_limit = ~0ULL;         ///< Largest device DMA-accessible address.
 
   // Statistics
   l4_uint64_t _time_busy = 0;
@@ -116,14 +137,6 @@ struct Drv : public Drv_base
     return false;
   }
 
-  /** Return true if a bounce buffer was provided for this driver instance. */
-  bool provided_bounce_buffer() const
-  { return _bb_size != 0; }
-
-  /** Return true if this memory region is accessible by the DMA engine. */
-  bool dma_accessible(l4_uint64_t dma_addr, l4_size_t size)
-  { return dma_addr <= _dma_limit && dma_addr + size - 1 <= _dma_limit; }
-
   /**
    * Perform the sdio reset, if necessary. The default is to not do anything.
    */
@@ -133,11 +146,6 @@ struct Drv : public Drv_base
   Hw_regs     _regs;                    ///< Controller MMIO registers.
   Receive_irq _receive_irq;             ///< IRQ receive function.
   Cmd_queue   _cmd_queue;               ///< Command queue.
-
-  Dma_addr _bb_phys;                    ///< Bounce buffer: DMA address.
-  l4_addr_t _bb_virt = 0;               ///< Bounce buffer: virtual address.
-  l4_size_t _bb_size = 0;               ///< Bounce buffer: size.
-  Dma_addr _dma_limit = ~0ULL;          /// Largest device DMA-accessible address.
 };
 
 }; // namespace Emmc

@@ -110,53 +110,15 @@ template <class Driver>
 void
 Device<Driver>::claim_bounce_buffer(char const *cap_name)
 {
-  auto *env = L4Re::Env::env();
-  auto cap = env->get_cap<L4Re::Dataspace>(cap_name);
-  if (!cap.is_valid())
-    return;
-
-  if (!_drv.bounce_buffer_if_required())
+  auto cap = L4Re::Env::env()->get_cap<L4Re::Dataspace>(cap_name);
+  if (cap.is_valid())
     {
-      warn.printf("\033[31;1mBounce buffer provided but not used by driver.\033[m\n");
-      return;
+      if (_drv.bounce_buffer_if_required())
+        _drv.setup_bounce_buffer(cap, _dma, _max_seg, warn);
+      else
+        warn.printf(
+          "\033[31;1mBounce buffer provided but not used by driver.\033[m\n");
     }
-
-  l4_size_t size = cap->size();
-  if (size < (64 << 10))
-    L4Re::throw_error(-L4_EINVAL, "Bounce buffer smaller than 64K");
-
-  L4Re::Dma_space::Dma_addr phys;
-  L4Re::chksys(_dma->map(L4::Ipc::make_cap_rw(cap), 0, &size,
-                         L4Re::Dma_space::Attributes::None,
-                         L4Re::Dma_space::Direction::Bidirectional,
-                         &phys),
-               "Resolve physical address of bounce buffer");
-
-  if (size != cap->size())
-    L4Re::throw_error(-L4_EINVAL, "Bounce buffer contiguous");
-
-  auto rm = env->rm();
-  L4Re::chksys(rm->attach(&_bb_region, size,
-                          L4Re::Rm::F::Search_addr | L4Re::Rm::F::RW
-                          | L4Re::Rm::F::Cache_normal,
-                          L4::Ipc::make_cap_rw(cap), 0, L4_PAGESHIFT),
-               "Attach bounce buffer");
-
-  // We should have at least one page per segment
-  if (size / _max_seg < L4_PAGESIZE)
-    L4Re::throw_error(-L4_EINVAL, "Bounce buffer is too small for max seg count");
-
-  _drv._bb_size = size;
-  _drv._bb_phys = phys;
-  _drv._bb_virt = (l4_addr_t)_bb_region.get();
-
-  if (!_drv.dma_accessible(phys, size))
-    L4Re::throw_error_fmt(-L4_EINVAL,
-                          "Bounce buffer at %08llx-%08llx not accessible by DMA",
-                          phys, phys + size);
-
-  warn.printf("\033[31;1mUsing bounce buffer of %s @ %08llx if required.\033[m\n",
-              Util::readable_size(size).c_str(), phys);
 }
 
 template <class Driver>
