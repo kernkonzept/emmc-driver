@@ -33,7 +33,9 @@ struct Device_factory
   create_client(cxx::Ref_ptr<Device_type> const &dev, unsigned numds,
                 bool readonly)
   {
-    return cxx::make_unique<Client_type>(dev, numds, readonly);
+    return cxx::make_unique<Client_type>(dev, numds, readonly,
+                                         Dbg::warn("virtio"),
+                                         Dbg::trace("virtio"));
   }
 
   static cxx::Ref_ptr<Device_type>
