@@ -32,13 +32,20 @@ typedef std::function<void(bool)> Receive_irq;
 
 using Dma_addr = L4Re::Dma_space::Dma_addr;
 
-struct Drv_base
+class Drv_base
 {
+public:
   void stats_wait_start()
   { _time_sleep -= Util::read_tsc(); }
 
   void stats_wait_done()
   { _time_sleep += Util::read_tsc(); }
+
+  l4_uint64_t time_busy() const
+  { return _time_busy; }
+
+  l4_uint64_t time_sleep() const
+  { return _time_sleep; }
 
   void delay(unsigned ms);
 
@@ -51,10 +58,15 @@ struct Drv_base
   bool provided_bounce_buffer() const
   { return _bb_size != 0; }
 
+  /** Return the size of the bounce buffer. */
+  l4_size_t bounce_buffer_size() const
+  { return _bb_size; }
+
   /** Return true if this memory region is accessible by the DMA engine. */
   bool dma_accessible(l4_uint64_t dma_addr, l4_size_t size)
   { return dma_addr <= _dma_limit && dma_addr + size - 1 <= _dma_limit; }
 
+protected:
   L4Re::Rm::Unique_region<l4_addr_t> _bb_region; ///< Bounce buffer: region.
   Dma_addr  _bb_phys;                  ///< Bounce buffer: DMA address.
   l4_addr_t _bb_virt = 0;              ///< Bounce buffer: virtual address.
@@ -68,8 +80,9 @@ struct Drv_base
 };
 
 template <class Hw_drv>
-struct Drv : public Drv_base
+class Drv : public Drv_base
 {
+public:
   using Hw_regs = L4drivers::Register_block<32>;
 
   explicit Drv(L4::Cap<L4Re::Dataspace> iocap,
@@ -141,8 +154,9 @@ struct Drv : public Drv_base
    * Perform the sdio reset, if necessary. The default is to not do anything.
    */
   void sdio_reset(Cmd*)
-  { }
+  {}
 
+protected:
   Hw_regs     _regs;                    ///< Controller MMIO registers.
   Receive_irq _receive_irq;             ///< IRQ receive function.
   Cmd_queue   _cmd_queue;               ///< Command queue.

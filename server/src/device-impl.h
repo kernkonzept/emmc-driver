@@ -1286,8 +1286,8 @@ Device<Driver>::power_up_sd(Cmd *cmd)
 
   warn.printf("Device initialization took %llu ms (%llu ms busy wait, %llu ms sleep).\n",
               Util::tsc_to_ms(Util::read_tsc() - _init_time),
-              Util::tsc_to_ms(_drv._time_busy),
-              Util::tsc_to_ms(_drv._time_sleep));
+              Util::tsc_to_ms(_drv.time_busy()),
+              Util::tsc_to_ms(_drv.time_sleep()));
 
   warn.printf("\033[33;1mSuccessfully set '%s' timing.\033[m\n",
               Mmc::str_timing(_sd_timing));
@@ -1613,8 +1613,8 @@ Device<Driver>::power_up_mmc(Cmd *cmd)
 
   warn.printf("Device initialization took %llu ms (%llu ms busy wait, %llu ms sleep).\n",
               Util::tsc_to_ms(Util::read_tsc() - _init_time),
-              Util::tsc_to_ms(_drv._time_busy),
-              Util::tsc_to_ms(_drv._time_sleep));
+              Util::tsc_to_ms(_drv.time_busy()),
+              Util::tsc_to_ms(_drv.time_sleep()));
   trace.printf("%u times redo status due to programming state.\n",
                _prg_cnt);
   for (auto it = _prg_map.begin(); it != _prg_map.end(); ++it)

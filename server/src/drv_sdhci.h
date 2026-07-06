@@ -59,6 +59,7 @@ public:
   using Drv<Sdhci<TYPE>>::_receive_irq;
   using Drv<Sdhci<TYPE>>::_regs;
   using Drv<Sdhci<TYPE>>::provided_bounce_buffer;
+  using Drv<Sdhci<TYPE>>::bounce_buffer_size;
   using Drv<Sdhci<TYPE>>::dma_accessible;
   using Drv<Sdhci<TYPE>>::delay;
 

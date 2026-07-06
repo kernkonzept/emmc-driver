@@ -159,7 +159,7 @@ public:
    */
   l4_size_t max_size() const override
   {
-    l4_size_t sz = _drv.provided_bounce_buffer() ? _drv._bb_size
+    l4_size_t sz = _drv.provided_bounce_buffer() ? _drv.bounce_buffer_size()
                                                  : _drv.max_inout_req_size();
     // The per-segment limit is advertised to the block frontend as size_max.
     // It must be a multiple of the sector size, otherwise the frontend may
