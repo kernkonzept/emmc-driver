@@ -364,16 +364,16 @@ parse_args(int argc, char *const *argv)
             }
           break;
         case OPT_MAX_SEG:
-            {
-              int i = atoi(optarg);
-              if (i < 0 || i > 128) // some arbitrary sane upper limit
-                {
-                  warn.printf("Invalid --max-seg=%d parameter\n", i);
-                  return -1;
-                }
-              max_seg = i;
-              break;
-            }
+          {
+            int i = atoi(optarg);
+            if (i < 0 || i > 128) // some arbitrary sane upper limit
+              {
+                warn.printf("Invalid --max-seg=%d parameter\n", i);
+                return -1;
+              }
+            max_seg = i;
+            break;
+          }
 
         case OPT_CLIENT:
           if (!opts.add_client(&drv))
