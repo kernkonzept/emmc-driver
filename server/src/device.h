@@ -36,9 +36,6 @@ namespace Errand = Block_device::Errand;
 
 namespace Emmc {
 
-template <class Driver>
-struct Dma_info;
-
 struct Device_type_disable
 {
   Mmc::Reg_ecsd::Ec196_device_type mmc{0};
