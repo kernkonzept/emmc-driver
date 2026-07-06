@@ -168,20 +168,26 @@ Factory::create_dev(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
         return nullptr;
     }
 
-  unsigned long id = -1UL;
+  unsigned long res_dma_id = -1UL;
+  unsigned long res_clock_freq = 0;
   for (auto i = 0u; i < dev_info.num_resources; ++i)
     {
       l4vbus_resource_t res;
       L4Re::chksys(dev.get_resource(i, &res), "Getting resource.");
-      if (res.type == L4VBUS_RESOURCE_DMA_DOMAIN)
+      if (res.type == L4VBUS_RESOURCE_DMA_DOMAIN && res_dma_id != -1UL)
         {
-          id = res.start;
           Dbg::trace().printf("Using device's DMA domain %lu.\n", res.start);
-          break;
+          res_dma_id = res.start;
+        }
+      else if (res.type == L4VBUS_RESOURCE_CLOCK)
+        {
+          Dbg::trace().printf("Using device's clock frequency %lu HZ.\n",
+                              res.start);
+          res_clock_freq = res.start;
         }
     }
 
-  if (id == -1UL)
+  if (res_dma_id == -1UL)
     Dbg::trace().printf("Using VBUS global DMA domain.\n");
 
   info.printf("Device @ %08llx: %sinterrupt: %d, %s-triggered.\n",
@@ -191,17 +197,20 @@ Factory::create_dev(L4vbus::Pci_dev const &dev, l4vbus_device_t const &dev_info,
 
   // XXX
   l4_uint32_t host_clock_freq = 400'000;
-  if (l4_uint32_t guessed_host_clock_freq
-      = factory->guess_host_clock_freq(mmio_addr))
+  if (res_clock_freq != 0)
+    host_clock_freq = res_clock_freq;
+  else if (l4_uint32_t guessed_host_clock_freq
+           = factory->guess_host_clock_freq(mmio_addr))
     host_clock_freq = guessed_host_clock_freq;
 
-  warn.printf("\033[33mAssuming host clock frequency of %s.\033[m\n",
-              Util::readable_freq(host_clock_freq).c_str());
+  warn.printf("\033[33mAssuming host clock frequency of %s (%s).\033[m\n",
+              Util::readable_freq(host_clock_freq).c_str(),
+              res_clock_freq ? "device resource" : "\033[31mGUESS\033[m");
 
   try
     {
       auto iocap = dev.bus_cap();
-      auto dma = create_dma_space(bus, id);
+      auto dma = create_dma_space(bus, res_dma_id);
 
       return factory->create(device_nr++, mmio_addr, mmio_size, iocap, irq_num,
                              irq_mode, icu, dma, registry, host_clock_freq,
