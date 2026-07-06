@@ -1193,7 +1193,7 @@ Device<Driver>::power_up_sd(Cmd *cmd)
         {
           mmc_timing = Mmc::Uhs_sdr104;
           a6_timing = Mmc::Arg_cmd6_switch_func::Grp1_sdr104;
-          freq = 200 * MHz;
+          freq = 208 * MHz;
         }
       else if (v18 && _drv.supp_uhs_timings(Mmc::Uhs_ddr50) && sf.acc_mode_ddr50()
                && !(_device_type_disable.sd & Mmc::Uhs_ddr50))
