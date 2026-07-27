@@ -16,6 +16,7 @@
 #include <l4/vbus/vbus_pci>
 #include <l4/libblock-device/block_device_mgr.h>
 #include <l4/libblock-device/pm.h>
+#include <l4/re/dataspace>
 #include <terminate_handler-l4>
 
 #include "device.h"
@@ -318,8 +319,7 @@ parse_args(int argc, char *const *argv)
         {
           if (optind < argc)
             {
-              warn.printf("Unknown parameter '%s'\n", argv[optind]);
-              warn.printf(usage_str, argv[0]);
+              Err().printf("Unknown parameter '%s'\n", argv[optind]);
               return -1;
             }
           break;
@@ -337,8 +337,15 @@ parse_args(int argc, char *const *argv)
         case 'd':
           {
             L4::Cap<L4Re::Dataspace> ds =
-              L4Re::chkcap(L4Re::Env::env()->get_cap<L4Re::Dataspace>(optarg),
-                           "Find a dataspace capability.\n");
+              L4Re::Env::env()->get_cap<L4Re::Dataspace>(optarg);
+            if (!ds.is_valid())
+              {
+                Err().printf("Did not find capability for dataspace '%s'. "
+                             "Likely due to a wrong configuration of the"
+                             " capability table.\n", optarg);
+                return -1;
+              }
+
             trusted_dataspaces->push_back(ds);
             break;
           }
@@ -389,7 +396,7 @@ parse_args(int argc, char *const *argv)
             int i = atoi(optarg);
             if (i < 0 || i > 128) // some arbitrary sane upper limit
               {
-                warn.printf("Invalid --max-seg=%d parameter\n", i);
+                Err().printf("Invalid --max-seg=%d parameter\n", i);
                 return -1;
               }
             max_seg = i;
@@ -405,7 +412,7 @@ parse_args(int argc, char *const *argv)
         case OPT_DEVICE:
           if (Blk_mgr::parse_device_name(optarg, opts.device) < 0)
             {
-              warn.printf("Invalid device name parameter\n");
+              Err().printf("Invalid device name parameter\n");
               return -1;
             }
           break;
@@ -422,12 +429,19 @@ parse_args(int argc, char *const *argv)
           opts.dma_map_all = false;
           break;
         default:
-          warn.printf(usage_str, argv[0]);
-          return -1;
+          {
+            if (opt == ':')
+              Err().printf("Required argument missing to option '%s'.\n",
+                           argv[optind - 1]);
+            else if (opt == '?')
+              Err().printf("Unrecognized option '%s'.\n", argv[optind - 1]);
+            return -1;
+          }
         }
     }
 
   if (!opts.add_client(&drv))
+    // add_client prints error messages itself
     return -1;
 
   Dbg::set_level(debug_level);
@@ -507,8 +521,12 @@ main(int argc, char *const *argv)
 
   trusted_dataspaces = std::make_shared<Ds_vector>();
 
-  if (int arg_idx = parse_args(argc, argv) < 0)
-    return arg_idx;
+  if (parse_args(argc, argv) < 0)
+    {
+      Err().printf("Error during command line argument parsing.\n");
+      Err().printf(usage_str, argv[0]);
+      return EXIT_FAILURE;
+    }
 
   info.printf("Emmc driver says hello.\n");
 
