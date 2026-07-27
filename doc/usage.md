@@ -38,8 +38,8 @@ The factory of the eMMC driver allows creation of the following objects:
 
   Static client
 
-  Multiple capability names can be provided by the `--client` command line
-  parameter.
+  Needs server right. Multiple capability names can be provided by the
+  `--client <cap_name>` command line parameter.
 
 * `bbds`
 
@@ -63,6 +63,13 @@ The factory of the eMMC driver allows creation of the following objects:
   mbox is used to perform voltage switching for certain SD card configurations.
   If this capability is not provided, the driver will allocate an arbitrary
   page.
+
+* `dataspace`
+
+  Trusted dataspaces
+
+  Multiple capability names can be provided by the `-d <cap_name>`,
+  `--register-ds <cap_name>` command line parameter.
 
 * `svr`
 
@@ -102,7 +109,11 @@ line options:
 
   Can be used multiple times.
 
-  Name of a provided capability that adheres to the  protocol.
+  This command has the following side effects:
+  - A capability with the given name is expected in the capability space of this
+  task.
+
+  String value.
 
 * `--disable-mode <mode>`
 
@@ -130,13 +141,16 @@ line options:
 
   Can be used multiple times.
 
-  Name of a provided capability with server rights that adheres to the ipc
-  protocol.
+  This command has the following side effects:
+  - A capability with the given name is expected in the capability space of this
+  task.
+
+  String value.
 
   This parameter opens a scope for the following subparameters:
 
-  * `--device <<PSN> | <PSN>:<PARTNUM> | [partuuid:]<UUID> |
-  [partlabel:]<LABEL>>`
+  *
+  `--device <<PSN> | <PSN>:<PARTNUM> | [partuuid:]<UUID> | [partlabel:]<LABEL>>`
 
     This option denotes either the eMMC device, or a partition on such a device
     to be exported for the client specified in the preceding `client` option.
@@ -263,9 +277,8 @@ Prior to connecting a client to a virtual block session it has to be created
 using the following Lua function. It has to be called on the client side of the
 IPC gate capability whose server side is bound to the eMMC driver.
 
-Call:   `create(0, "device=<<PSN> | <PSN>:<PARTNUM> | [partuuid:]<UUID> |
-[partlabel:]<LABEL>>" [, "ds-max=<max>", "readonly", "dma-map-all", "dma-map-
-per-req"])`
+Call:
+`create(0, "device=<<PSN> | <PSN>:<PARTNUM> | [partuuid:]<UUID> | [partlabel:]<LABEL>>" [, "ds-max=<max>", "readonly", "dma-map-all", "dma-map-per-req"])`
 
 * `"device=<<PSN> | <PSN>:<PARTNUM> | [partuuid:]<UUID> | [partlabel:]<LABEL>>"`
 

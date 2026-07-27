@@ -109,8 +109,10 @@ cmds:
       multiple dataspaces.
 
       The option's parameter is the name of a dataspace capability.
-    type: cap
-    cap-name: 'dataspace'
+    type: str
+    side-effects:
+      - type: 'expect-cap'
+        name: 'dataspace'
     multiple: true
   - name: 'disable-mode'
     metavar: 'mode'
@@ -136,11 +138,11 @@ cmds:
       - name: 'client'
         metavar: 'cap_name'
         desc: Connect a static client.
-        type: cap
-        cap-name: 'client'
-        protocol: 'ipc'
+        type: str
+        side-effects:
+          - type: 'expect-cap'
+            name: 'client'
         multiple: true
-        needs-server-right: true
       - name: 'device'
         metavar: '<PSN> | <PSN>:<PARTNUM> | [partuuid:]<UUID> | [partlabel:]<LABEL>'
         desc: |
@@ -206,7 +208,6 @@ caps:
     protocol: 'ipc'
     needs-server-right: true
     multiple: true
-    provided-by-cmd: 'client'
   - name: 'bbds'
     desc: |
       **Only used by the SDHCI driver.**
@@ -232,6 +233,11 @@ caps:
       is used to perform voltage switching for certain SD card configurations.
       If this capability is not provided, the driver will allocate an
       arbitrary page.
+    protocol: 'dataspace'
+  - name: 'dataspace'
+    desc: |
+      Trusted dataspaces
+    multiple: true
     protocol: 'dataspace'
   - name: 'svr'
     desc: |
