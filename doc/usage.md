@@ -8,39 +8,11 @@
 
 The eMMC driver is a driver for PCI Express eMMC controllers.
 
-## Starting the service
+## Factory {#l4re_emmc_driver_factory}
 
-The eMMC driver can be started with Lua like this:
+The factory of the eMMC driver allows creation of the following objects:
 
-```lua
-local emmc_bus = L4.default_loader:new_channel();
-L4.default_loader:start({
-  caps = {
-    vbus = vbus_emmc,
-    svr = emmc_bus:svr(),
-  },
-}, "rom/emmc-drv");
-```
-
-First, an IPC gate (`emmc_bus`) is created which is used between the eMMC driver
-and a client to request access to a particular disk or partition. The server
-side is assigned to the optional `svr` capability of the eMMC driver. See the
-section below on how to configure access to a disk or partition.
-
-The eMMC driver needs access to a virtual bus capability (`vbus`). On the
-virtual bus the eMMC driver searches for eMMC compliant storage controllers.
-Please see io's documentation about how to setup a virtual bus.
-
-### Supported devices
-
-The eMMC driver supports SDHCI and SDHI controllers, in particular
-- SDHI interfaces found on RCar3 r8a7795 boards
-- SDHCI interfaces found on RPI4
-- uSDHCI interfaces found on i.MX8 boards
-- uSDHCI interfaces found on the S32G SoC
-- the QEMU SD card emulation (SDHCI, see `doc/pcie-ecam.io`),
-- the QEMU eMMC emulation (provided by extending the QEMU SD card emulation by
-`doc/qemu-patch.diff`).
+- Virtio block host, the VirtIO block interface to a single block device
 
 
 <hr>
@@ -202,6 +174,41 @@ line options:
     dataspace before an I/O request and unmapping it after the request.
 
     Flag. True if provided.
+
+<hr>
+## Starting the service
+
+The eMMC driver can be started with Lua like this:
+
+```lua
+local emmc_bus = L4.default_loader:new_channel();
+L4.default_loader:start({
+  caps = {
+    vbus = vbus_emmc,
+    svr = emmc_bus:svr(),
+  },
+}, "rom/emmc-drv");
+```
+
+First, an IPC gate (`emmc_bus`) is created which is used between the eMMC driver
+and a client to request access to a particular disk or partition. The server
+side is assigned to the optional `svr` capability of the eMMC driver. See the
+section below on how to configure access to a disk or partition.
+
+The eMMC driver needs access to a virtual bus capability (`vbus`). On the
+virtual bus the eMMC driver searches for eMMC compliant storage controllers.
+Please see io's documentation about how to setup a virtual bus.
+
+### Supported devices
+
+The eMMC driver supports SDHCI and SDHI controllers, in particular
+- SDHI interfaces found on RCar3 r8a7795 boards
+- SDHCI interfaces found on RPI4
+- uSDHCI interfaces found on i.MX8 boards
+- uSDHCI interfaces found on the S32G SoC
+- the QEMU SD card emulation (SDHCI, see `doc/pcie-ecam.io`),
+- the QEMU eMMC emulation (provided by extending the QEMU SD card emulation by
+`doc/qemu-patch.diff`).
 
 ## Virtio block host {#l4re_servers_emmc_driver_param_virtio_block_host}
 

@@ -4,6 +4,13 @@ anchor: l4re_servers_emmc_driver
 desc: |
   The eMMC driver is a driver for PCI Express eMMC controllers.
 
+  ## Factory {#l4re_emmc_driver_factory}
+
+  The factory of the eMMC driver allows creation of the following objects:
+
+  - Virtio block host, the VirtIO block interface to a single block device
+
+text-after-cmds: |
   ## Starting the service
 
   The eMMC driver can be started with Lua like this:
