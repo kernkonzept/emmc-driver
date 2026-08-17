@@ -2,7 +2,7 @@ name: eMMC driver
 binary-name: emmc-drv
 anchor: l4re_servers_emmc_driver
 desc: |
-  The eMMC driver is a driver for PCI Express eMMC controllers.
+  The eMMC driver is a driver for eMMC controllers.
 
   ## Factory {#l4re_emmc_driver_factory}
 

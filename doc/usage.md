@@ -6,7 +6,7 @@
 
 ## Description {#l4re_servers_emmc_driver_description}
 
-The eMMC driver is a driver for PCI Express eMMC controllers.
+The eMMC driver is a driver for eMMC controllers.
 
 ## Factory {#l4re_emmc_driver_factory}
 
