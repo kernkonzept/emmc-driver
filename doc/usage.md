@@ -24,6 +24,16 @@ The factory of the eMMC driver allows creation of the following objects:
 
   Mandatory capability.
 
+* `vbus_mbox`
+
+  **Only used by the SDHCI driver when attaching to a bcm2711-compatible
+  device.** Required for finding the service providing access to the firmware
+  mbox device which is used to perform voltage switching for certain SD card
+  configuations. This is either the Io server or the bcm2835-mbox-driver
+  service.
+
+  Mandatory capability.
+
 * `client`
 
   Static client
@@ -46,7 +56,7 @@ The factory of the eMMC driver allows creation of the following objects:
   descriptors for the SDHCI driver. If this capability is not provided, the
   driver will allocate an arbitrary page.
 
-* `bcm2835_mbox_mem`
+* `mbox_memory`
 
   **Only used by the SDHCI driver when attaching to an bcm2711-compatible
   device.** Page (4096 bytes) for storing bcm2835 mbox messages. The firmware
@@ -198,6 +208,43 @@ section below on how to configure access to a disk or partition.
 The eMMC driver needs access to a virtual bus capability (`vbus`). On the
 virtual bus the eMMC driver searches for eMMC compliant storage controllers.
 Please see io's documentation about how to setup a virtual bus.
+
+To start the eMMC driver with a bcm2711-compatible device without separate
+mailbox service, use the following setup:
+
+```lua
+local emmc_bus = L4.default_loader:new_channel();
+L4.default_loader:start({
+  caps = {
+    vbus = vbus_emmc,
+    vbus_mbox = vbus_emmc,
+    svr = emmc_bus:svr(),
+  },
+}, "rom/emmc-drv");
+```
+
+To start the eMMC driver with a bcm2711-compatible device using a separate
+mailbox service, use the following setup:
+
+```lua
+local mbox_channel = L4.default_loader:new_channel();
+L4.default_loader:start({
+  caps = {
+    vbus = vbus_io_mbox,
+    svr = mbox_channel:svr(),
+  },
+},
+"rom/bcm2835-mbox rom/mbox.cfg");
+
+local emmc_bus = L4.default_loader:new_channel();
+L4.default_loader:start({
+  caps = {
+    vbus = vbus_emmc,
+    vbus_mbox = mbox_channel,
+    svr = emmc_bus:svr(),
+  },
+}, "rom/emmc-drv");
+```
 
 ### Supported devices
 
