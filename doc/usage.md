@@ -8,11 +8,25 @@
 
 The eMMC driver is a driver for eMMC controllers.
 
-## Factory {#l4re_emmc_driver_factory}
+First, an IPC gate (`emmc_bus`) is created which is used between the eMMC driver
+and a client to request access to a particular disk or partition. The server
+side is assigned to the optional `svr` capability of the eMMC driver. See the
+section below on how to configure access to a disk or partition.
 
-The factory of the eMMC driver allows creation of the following objects:
+The eMMC driver needs access to a virtual bus capability (`vbus`). On the
+virtual bus the eMMC driver searches for eMMC compliant storage controllers.
+Please see io's documentation about how to setup a virtual bus.
 
-- Virtio block host, the VirtIO block interface to a single block device
+### Supported devices
+
+The eMMC driver supports SDHCI and SDHI controllers, in particular
+- SDHI interfaces found on RCar3 r8a7795 boards
+- SDHCI interfaces found on RPI4
+- uSDHCI interfaces found on i.MX8 boards
+- uSDHCI interfaces found on the S32G SoC
+- the QEMU SD card emulation (SDHCI, see `doc/pcie-ecam.io`),
+- the QEMU eMMC emulation (provided by extending the QEMU SD card emulation by
+`doc/qemu-patch.diff`).
 
 
 <hr>
@@ -269,9 +283,12 @@ The eMMC driver supports SDHCI and SDHI controllers, in particular
 - uSDHCI interfaces found on the S32G SoC
 - the QEMU SD card emulation (SDHCI, see `doc/pcie-ecam.io`),
 - the QEMU eMMC emulation (provided by extending the QEMU SD card emulation by
-`doc/qemu-patch.diff`).
+  `doc/qemu-patch.diff`).
 
-## Virtio block host {#l4re_servers_emmc_driver_param_virtio_block_host}
+<hr>
+## Factory Options {#l4re_servers_emmc_driver_factory_options}
+
+### Virtio block host {#l4re_servers_emmc_driver_param_virtio_block_host}
 
 Prior to connecting a client to a virtual block session it has to be created
 using the following Lua function. It has to be called on the client side of the
