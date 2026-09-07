@@ -186,7 +186,7 @@ line options:
     Flag. True if provided.
 
 <hr>
-## Starting the service
+## Starting the service {#l4re_servers_emmc_driver_starting}
 
 The eMMC driver can be started with Lua like this:
 
@@ -246,7 +246,7 @@ L4.default_loader:start({
 }, "rom/emmc-drv");
 ```
 
-### Supported devices
+### Supported devices {#l4re_servers_emmc_driver_supported_devices}
 
 The eMMC driver supports SDHCI and SDHI controllers, in particular
 - SDHI interfaces found on RCar3 r8a7795 boards
