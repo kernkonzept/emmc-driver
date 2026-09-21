@@ -46,7 +46,7 @@ static unsigned max_seg = 64;
 enum { No_partno = -1 };
 
 static char const *usage_str =
-"Usage: %s [-vq] --client CAP <client parameters>\n"
+"\nUsage: %s [-vq] --client CAP <client parameters>\n"
 "\n"
 "Options:\n"
 " -v                   Verbose mode\n"
@@ -312,6 +312,7 @@ parse_args(int argc, char *const *argv)
   };
 
   Client_opts opts;
+  opterr = 0; // prevent getopt_long() from printing its own error message
   for (;;)
     {
       int opt = getopt_long(argc, argv, "vqd:", loptions, NULL);
@@ -388,7 +389,7 @@ parse_args(int argc, char *const *argv)
           else
             {
               warn.printf("Invalid parameter\n\n");
-              warn.printf(usage_str, argv[0]);
+              warn.cprintf(usage_str, argv[0]);
             }
           break;
         case OPT_MAX_SEG:
@@ -528,8 +529,7 @@ main(int argc, char *const *argv)
 
   if (parse_args(argc, argv) < 0)
     {
-      Err().printf("Error during command line argument parsing.\n");
-      Err().printf(usage_str, argv[0]);
+      Err().cprintf(usage_str, argv[0]);
       return EXIT_FAILURE;
     }
 
