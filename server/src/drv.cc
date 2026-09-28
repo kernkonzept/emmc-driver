@@ -38,7 +38,9 @@ Drv_base::setup_bounce_buffer(L4::Cap<L4Re::Dataspace> cap,
 
   auto rm = L4Re::Env::env()->rm();
   L4Re::chksys(rm->attach(&_bb_region, size,
-                          L4Re::Rm::F::Search_addr | L4Re::Rm::F::RW
+                          L4Re::Rm::F::Search_addr
+                          | L4Re::Rm::F::RW
+                          | L4Re::Rm::F::Eager_map
                           | L4Re::Rm::F::Cache_normal,
                           L4::Ipc::make_cap_rw(cap), 0, L4_PAGESHIFT),
                "Attach bounce buffer");
