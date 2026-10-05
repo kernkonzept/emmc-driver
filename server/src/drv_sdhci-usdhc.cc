@@ -68,6 +68,7 @@ static Device_type_nopci t_sdhci_usdhc_d{"fsl,s32gen1-usdhc", &f_sdhci_usdhc};
 static Device_type_nopci t_sdhci_usdhc_e{"nxp,s32g2-usdhc", &f_sdhci_usdhc};
 static Device_type_nopci t_sdhci_usdhc_f{"nxp,s32cc-usdhc", &f_sdhci_usdhc};
 static Device_type_nopci t_sdhci_usdhc_g{"fsl,imx95-usdhc", &f_sdhci_usdhc,
-                                         Device_flags::Manual_tuning};
+                                         Device_flags::Manual_tuning
+                                         | Device_flags::Dummy_pad};
 
 } // namespace

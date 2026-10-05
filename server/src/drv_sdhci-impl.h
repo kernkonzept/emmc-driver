@@ -600,7 +600,7 @@ Sdhci<TYPE>::cmd_submit_handle_tuning(Cmd const *cmd,
         mc.msbsel() = 0;
         mc.ac23en() = 0;
         mc.auto_tune_en() = 1;
-        mc.fbclk_sel() = 1;
+        mc.fbclk_sel() = !(_flags & Device_flags::Dummy_pad);
 
         Reg_autocmd12_err_status es(this);
         es.smp_clk_sel() = 0;
@@ -999,6 +999,8 @@ Sdhci<TYPE>::set_clock_and_timing(l4_uint32_t freq, Mmc::Timing timing, bool str
       mc.ddr_en() = 0;
       mc.hs400_mo() = 0;
       mc.en_hs400_mo() = 0;
+      if (_flags & Device_flags::Dummy_pad)
+        mc.fbclk_sel() = 0;
 
       Reg_strobe_dll_ctrl(0U).write(this);
 

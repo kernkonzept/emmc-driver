@@ -40,6 +40,8 @@ enum Device_flags : l4_uint32_t
   None = 0,
   /// The controller requires manual tuning.
   Manual_tuning = 1 << 0,
+  /// The controller has a dummy pad for the clock loopback.
+  Dummy_pad = 1 << 1,
 };
 
 constexpr Device_flags operator|(Device_flags lhs, Device_flags rhs)
