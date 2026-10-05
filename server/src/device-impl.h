@@ -1613,6 +1613,18 @@ Device<Driver>::power_up_mmc(Cmd *cmd)
       // Delay required after changing voltage.
       _drv.delay(Voltage_delay_ms);
 
+      // A dual data rate bus width requires HS_TIMING set to high speed.
+      if (mmc_timing == Mmc::Mmc_ddr52)
+        {
+          mmc_set_bus_width(cmd, Mmc::Reg_ecsd::Ec183_bus_width::W_8bit_sdr);
+          if (cmd->error())
+            continue;
+
+          mmc_set_timing(cmd, hs_timing, Mmc::Hs, freq);
+          if (cmd->error())
+            continue;
+        }
+
       mmc_set_bus_width(cmd, bus_width);
       if (cmd->error())
         continue;
