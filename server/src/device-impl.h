@@ -865,6 +865,19 @@ Device<Driver>::mmc_set_timing(Cmd *cmd,
   _drv.set_clock_and_timing(freq, mmc_timing, strobe);
   cmd->init_arg(Mmc::Cmd13_send_status, _rca << 16);
   cmd_exec(cmd);
+
+  /*
+   * HS200 works reliably only after tuning: a CRC error does not indicate a
+   * failed switch and the EXT_CSD cannot be read yet. The tuning detects a
+   * failed switch.
+   */
+  bool hs200 = mmc_timing == Mmc::Mmc_hs200;
+  if (hs200 && cmd->status == Cmd::Cmd_error)
+    {
+      cmd->status = Cmd::Success;
+      return;
+    }
+
   if (cmd->error() || cmd->switch_error())
     {
       warn.printf("Set timing (%s, %s) error (%s).\n",
@@ -874,6 +887,9 @@ Device<Driver>::mmc_set_timing(Cmd *cmd,
       cmd->status = Cmd::Error;
       return;
     }
+
+  if (hs200)
+    return;
 
   cmd->init_data(Mmc::Cmd8_send_ext_csd, 0, 512, _io_buf.pget(), 0);
   cmd_exec(cmd);
