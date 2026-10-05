@@ -69,7 +69,7 @@ Device<Driver>::Device(int nr, l4_uint64_t mmio_addr, l4_uint64_t mmio_size,
   trace2(Dbg::Trace2, "device", nr),
   _device_type_disable(dt_disable)
 {
-  if (flags & Device_flags::No_std_tuning)
+  if (flags & Device_flags::Manual_tuning)
     {
       _device_type_disable.mmc.hs200_sdr_18() = 1;
       _device_type_disable.mmc.hs200_sdr_12() = 1;
@@ -900,8 +900,50 @@ Device<Driver>::mmc_set_timing(Cmd *cmd,
 
 template <class Driver>
 bool
-Device<Driver>::execute_tuning(Cmd *cmd, l4_uint32_t tuning_cmd)
+Device<Driver>::send_tuning_block(Cmd *cmd, l4_uint32_t tuning_cmd,
+                                  Mmc::Bus_width bus_width)
 {
+  l4_uint8_t const *pattern;
+  unsigned size;
+  switch (bus_width)
+    {
+    case Mmc::Width_8bit:
+      pattern = Mmc::Tuning_block_8bit;
+      size = sizeof(Mmc::Tuning_block_8bit);
+      break;
+    case Mmc::Width_4bit:
+      pattern = Mmc::Tuning_block_4bit;
+      size = sizeof(Mmc::Tuning_block_4bit);
+      break;
+    default:
+      return false;
+    }
+
+  cmd->init_data(tuning_cmd, 0, size, _io_buf.pget(),
+                 reinterpret_cast<l4_addr_t>(_io_buf.get<void>()));
+  cmd->flags.expected_error() = true;
+  cmd_exec(cmd);
+  if (cmd->error())
+    return false;
+
+  // Byte accesses to the uncached buffer.
+  auto const *data = _io_buf.get<l4_uint8_t const volatile>();
+  for (unsigned i = 0; i < size; ++i)
+    if (data[i] != pattern[i])
+      return false;
+
+  return true;
+}
+
+template <class Driver>
+bool
+Device<Driver>::execute_tuning(Cmd *cmd, l4_uint32_t tuning_cmd,
+                               Mmc::Bus_width bus_width)
+{
+  if (_drv.manual_tuning())
+    return _drv.execute_manual_tuning([this, cmd, tuning_cmd, bus_width]
+      { return send_tuning_block(cmd, tuning_cmd, bus_width); });
+
   unsigned max_loops = Mmc::Arg_cmd21_send_tuning_block::Max_loops;
   if (tuning_cmd == Mmc::Cmd19_send_tuning_block)
     max_loops = Mmc::Arg_cmd19_send_tuning_block::Max_loops;
@@ -1323,14 +1365,16 @@ Device<Driver>::power_up_sd(Cmd *cmd)
 
       _drv.set_clock_and_timing(freq, mmc_timing);
 
-      // Tuning: SDR104: Always. SDR50: Only if controller demands.
+      // Tuning: SDR104: Always. SDR50, DDR50: Only if controller demands.
       if (   mmc_timing == Mmc::Uhs_sdr104
-          || mmc_timing == Mmc::Uhs_ddr50
+          || (mmc_timing == Mmc::Uhs_ddr50 && _drv.needs_tuning_ddr50())
           || (mmc_timing == Mmc::Uhs_sdr50 && _drv.needs_tuning_sdr50()))
         {
           info.printf("Mode '%s' needs tuning...\n", Mmc::str_timing(mmc_timing));
           _drv.reset_tuning();
-          if (!execute_tuning(cmd, Mmc::Cmd19_send_tuning_block))
+          if (!execute_tuning(cmd, Mmc::Cmd19_send_tuning_block,
+                              has_bus_4bit ? Mmc::Width_4bit
+                                           : Mmc::Width_1bit))
             {
               _device_type_disable.sd |= mmc_timing;
               info.printf("\033[31mTuning for mode '%s' failed!\033[m\n",
@@ -1651,7 +1695,8 @@ Device<Driver>::power_up_mmc(Cmd *cmd)
             continue;
 
           if (device_type_test.hs200_sdr_18()
-              && !execute_tuning(cmd, Mmc::Cmd21_send_tuning_block))
+              && !execute_tuning(cmd, Mmc::Cmd21_send_tuning_block,
+                                 Mmc::Width_8bit))
             continue;
         }
 

@@ -58,6 +58,7 @@ public:
   using Drv<Sdhci<TYPE>>::_bb_size;
   using Drv<Sdhci<TYPE>>::_receive_irq;
   using Drv<Sdhci<TYPE>>::_regs;
+  using Drv<Sdhci<TYPE>>::_flags;
   using Drv<Sdhci<TYPE>>::provided_bounce_buffer;
   using Drv<Sdhci<TYPE>>::bounce_buffer_size;
   using Drv<Sdhci<TYPE>>::dma_accessible;
@@ -135,8 +136,8 @@ private:
 private:
   enum
   {
-    /// true: use standard tuning feature (uSDHC only)
-    Usdhc_std_tuning = true,
+    Tuning_delay_cells = 127,   ///< Delay cells for manual tuning (uSDHC)
+    Auto_tuning_window = 3,     ///< Delay cells for auto tuning (uSDHC)
   };
 
   enum Regs
@@ -523,6 +524,7 @@ private:
     CXX_BITFIELD_MEMBER(25, 25, rstc, raw);   ///< Software reset for CMD line
     CXX_BITFIELD_MEMBER(24, 24, rsta, raw);   ///< Software reset for all
     CXX_BITFIELD_MEMBER(23, 23, ipp_rst_n, raw); ///< Hardware reset
+    CXX_BITFIELD_MEMBER(22, 22, rst_fifo, raw); ///< Reset async FIFO (uSDHC)
     CXX_BITFIELD_MEMBER(16, 19, dtocv, raw);  ///< Data timeout counter value
     enum Data_timeout
     {
@@ -669,7 +671,7 @@ private:
     CXX_BITFIELD_MEMBER(1, 1, tcsen, raw);      ///< Transfer complete SE
     CXX_BITFIELD_MEMBER(0, 0, ccsen, raw);      ///< Command complete SE
 
-    void enable_ints(Cmd const *cmd)
+    void enable_ints(Cmd const *cmd, bool std_tuning)
     {
       ccsen()    = 1;
       tcsen()    = 1;
@@ -687,8 +689,7 @@ private:
                    || cmd->flags.auto_cmd23();
       admaesen() = 1;
       dmaesen()  = 1;
-      brrsen()   =    cmd->cmd == Mmc::Cmd19_send_tuning_block
-                   || cmd->cmd == Mmc::Cmd21_send_tuning_block;
+      brrsen()   = std_tuning;
     }
   };
 
@@ -723,7 +724,7 @@ private:
     CXX_BITFIELD_MEMBER(1, 1, tcien, raw);      ///< Transfer complete IE
     CXX_BITFIELD_MEMBER(0, 0, ccien, raw);      ///< Command complete IE
 
-    void enable_ints(Cmd const *cmd)
+    void enable_ints(Cmd const *cmd, bool std_tuning)
     {
       if (Suppress_cc_ints)
         ccien() = cmd->flags.has_data() ? 0 : 1;
@@ -745,8 +746,7 @@ private:
                    || cmd->flags.auto_cmd23();
       admaeien() = 1;
       dmaeien()  = 1;
-      brrien()   =    cmd->cmd == Mmc::Cmd19_send_tuning_block
-                   || cmd->cmd == Mmc::Cmd21_send_tuning_block;
+      brrien()   = std_tuning;
     }
   };
 
@@ -1295,6 +1295,13 @@ public:
       }
   }
 
+  /**
+   * Return true if DDR50 needs tuning. With manual tuning the uSDHC samples
+   * DDR50 at a fixed point.
+   */
+  bool needs_tuning_ddr50() const
+  { return !manual_tuning(); }
+
   /** Return true if the power limit is supported by the controller. */
   constexpr bool supp_power_limit(Mmc::Power_limit power) const
   {
@@ -1313,6 +1320,19 @@ public:
 
   /** Return true if tuning has finished. */
   bool tuning_finished(bool *success);
+
+  /** Return true if the controller requires manual tuning. */
+  bool manual_tuning() const
+  { return TYPE == Sdhci_type::Usdhc && (_flags & Device_flags::Manual_tuning); }
+
+  /**
+   * Find the sampling point by sweeping the delay cells.
+   *
+   * \param send_tuning  Send one tuning command with the current delay.
+   *
+   * \retval true  The sampling point was found and set.
+   */
+  bool execute_manual_tuning(Send_tuning const &send_tuning);
 
   void reset_tuning();
   void enable_auto_tuning();
@@ -1374,6 +1394,14 @@ private:
   Dma_addr cmd_submit_prepare_dma(Cmd *cmd,
                                   Reg_cmd_xfr_typ &xt, Reg_mix_ctrl &mc);
 
+  /** Return true if `cmd` is a tuning command of standard tuning. */
+  bool std_tuning_cmd(Cmd const *cmd) const
+  {
+    return !manual_tuning()
+           && (   cmd->cmd == Mmc::Cmd19_send_tuning_block
+               || cmd->cmd == Mmc::Cmd21_send_tuning_block);
+  }
+
   /** Helper for cmd_submit(): Handle tuning. */
   void cmd_submit_handle_tuning(Cmd const *cmd,
                                 Reg_cmd_xfr_typ &xt, Reg_mix_ctrl &mc);
@@ -1405,6 +1433,29 @@ private:
 
   /** Required for HS400. */
   void set_strobe_dll();
+
+  /** Registers restored after the reset before each tuning command. */
+  struct Tuning_regs
+  {
+    explicit Tuning_regs(Sdhci const *sdhci)
+    : pc(sdhci), sc(sdhci), vs(sdhci), vs2(sdhci)
+    {}
+
+    Reg_prot_ctrl pc;
+    Reg_sys_ctrl sc;
+    Reg_vend_spec vs;
+    Reg_vend_spec2 vs2;
+  };
+
+  /** Manual tuning: set the delay for the next tuning command. */
+  void prepare_tuning(unsigned cells, Tuning_regs const &regs);
+
+  /** Manual tuning: leave the tuning procedure. */
+  void post_tuning();
+
+  /** Wait until `cond` returns true. Return false on timeout. */
+  template <typename COND>
+  static bool wait_for(l4_cpu_time_t us, COND const &cond);
 
   /** Set ADMA2 descriptors for a single memory region. */
   template<typename T>

@@ -72,6 +72,10 @@ public:
   bool needs_tuning_sdr50() const
   { return false; }
 
+  /** Return true if DDR50 needs tuning. */
+  bool needs_tuning_ddr50() const
+  { return true; }
+
   /** Return true if the power limit is supported by the controller. */
   bool supp_power_limit(Mmc::Power_limit power) const
   { (void)power; return false; }
@@ -82,6 +86,13 @@ public:
 
   void reset_tuning() {}
   void enable_auto_tuning() {}
+
+  /** Return true if the controller requires manual tuning. */
+  bool manual_tuning() const
+  { return false; }
+
+  bool execute_manual_tuning(Send_tuning const &)
+  { return false; }
 
   /** Return true if the card is busy. */
   bool card_busy() const

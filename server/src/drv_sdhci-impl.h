@@ -10,8 +10,10 @@
  * Non-inline parts of driver for SDHCI-like controllers.
  */
 
+#include <l4/re/env.h>
 #include <l4/sys/cache.h>
 #include <l4/sys/cxx/consts>
+#include <l4/sys/kip.h>
 
 #include "cmd.h"
 #include "debug.h"
@@ -137,7 +139,7 @@ Sdhci<TYPE>::init()
       Reg_autocmd12_err_status().write(this);
       Reg_clk_tune_ctrl_status().write(this);
       Reg_dll_ctrl().write(this);
-      if (Usdhc_std_tuning)
+      if (!manual_tuning())
         {
           Reg_tuning_ctrl tc(this);
           tc.tuning_start_tap() = 0x14;
@@ -162,7 +164,7 @@ Sdhci<TYPE>::init()
       pc.write(this);
 
       Reg_tuning_ctrl tc(this);
-      if (Usdhc_std_tuning)
+      if (!manual_tuning())
         {
           tc.std_tuning_en() = 1;
           tc.tuning_start_tap() = 20; // XXX Linux device tree: "tuning-start-tap"
@@ -272,8 +274,7 @@ Sdhci<TYPE>::handle_irq_cmd(Cmd *cmd, Reg_int_status is)
       trace.printf("AC12 status = %08x\n", ec.raw);
       cmd->status = Cmd::Cmd_error;
     }
-  else if (   cmd->cmd == Mmc::Cmd19_send_tuning_block
-           || cmd->cmd == Mmc::Cmd21_send_tuning_block)
+  else if (std_tuning_cmd(cmd))
     {
       if (is.cc())
         {
@@ -337,7 +338,7 @@ Sdhci<TYPE>::handle_irq_data(Cmd *cmd, Reg_int_status is)
             }
           adma2_dump_descs();
         }
-      else if (is.dce())
+      else if (is.dce() && !cmd->flags.expected_error())
         {
           printf("CRC error. Tuning problem?\n");
         }
@@ -741,8 +742,7 @@ Sdhci<TYPE>::cmd_submit(Cmd *cmd)
 
   Dma_addr dma_addr = cmd_submit_prepare_dma(cmd, xt, mc);
 
-  if (   cmd->cmd == Mmc::Cmd19_send_tuning_block
-      || cmd->cmd == Mmc::Cmd21_send_tuning_block)
+  if (std_tuning_cmd(cmd))
     cmd_submit_handle_tuning(cmd, xt, mc);
 
   if (dma_addr != ~0ULL)
@@ -755,7 +755,7 @@ Sdhci<TYPE>::cmd_submit(Cmd *cmd)
 
   Reg_int_status(~0U).write(this); // clear all IRQs
   Reg_int_status_en se;
-  se.enable_ints(cmd);
+  se.enable_ints(cmd, std_tuning_cmd(cmd));
   if (No_dma_during_setup && cmd->flags.has_data() && cmd->data_virt != 0
       && (TYPE == Sdhci_type::Iproc || TYPE == Sdhci_type::Bcm2711))
     {
@@ -764,7 +764,7 @@ Sdhci<TYPE>::cmd_submit(Cmd *cmd)
     }
   se.write(this); // enable status
   Reg_int_signal_en ie;
-  ie.enable_ints(cmd);
+  ie.enable_ints(cmd, std_tuning_cmd(cmd));
   ie.write(this); // unmask IRQs
 
   // send the command
@@ -845,7 +845,7 @@ Sdhci<TYPE>::cmd_wait_data_finished(Cmd *cmd)
   time = Util::read_tsc() - time;
   _time_sleep += time;
   l4_uint64_t us = Util::tsc_to_us(time);
-  if (us >= 1000)
+  if (us >= 1000 && !cmd->flags.expected_error())
     warn.printf("CMD%d data took \033[1m%llu us.\033[m\n", cmd->cmd_idx(), us);
 }
 
@@ -1248,7 +1248,16 @@ Sdhci<TYPE>::reset_tuning()
 {
   if (TYPE == Sdhci_type::Usdhc)
     {
-      if (Usdhc_std_tuning)
+      if (manual_tuning())
+        {
+          Reg_mix_ctrl mc(this);
+          mc.auto_tune_en() = 0;
+          mc.smp_clk_sel() = 0;
+          mc.write(this);
+
+          Reg_clk_tune_ctrl_status().write(this);
+        }
+      else
         {
           Reg_mix_ctrl mc(this);
           mc.auto_tune_en() = 0;
@@ -1324,6 +1333,145 @@ Sdhci<TYPE>::tuning_finished(bool *success)
       *success = hc2.tuned();
       return true;
     }
+}
+
+template <Sdhci_type TYPE>
+void
+Sdhci<TYPE>::prepare_tuning(unsigned cells, Tuning_regs const &regs)
+{
+  // Give the card time to recover from a failed tuning command.
+  delay(1);
+
+  /*
+   * The controller requires a reset before each tuning command. Restore the
+   * bus width, DMA, clock and voltage settings afterwards.
+   */
+  Reg_sys_ctrl rst(regs.sc.raw);
+  rst.rsta() = 1;
+  rst.write(this);
+  if (!Util::poll(100, [this] { return !Reg_sys_ctrl(this).rsta(); },
+                  "Reset before tuning", false))
+    warn.printf("Reset before tuning command timed out.\n");
+
+  Reg_sys_ctrl(regs.sc.raw).write(this);
+  Reg_prot_ctrl(regs.pc.raw).write(this);
+  Reg_vend_spec(regs.vs.raw).write(this);
+  Reg_vend_spec2(regs.vs2.raw).write(this);
+
+  Reg_mix_ctrl mc(this);
+  mc.exe_tune() = 1;
+  mc.smp_clk_sel() = 1;
+  mc.write(this);
+
+  Reg_clk_tune_ctrl_status cs;
+  cs.dly_cell_set_pre() = cells;
+  cs.write(this);
+
+  rst.read(this);
+  rst.rst_fifo() = 1;
+  rst.write(this);
+  if (!Util::poll(100, [this] { return !Reg_sys_ctrl(this).rst_fifo(); },
+                  "FIF reset before tuning", false))
+    warn.printf("FIFO reset before tuning command timed out.\n");
+}
+
+template <Sdhci_type TYPE>
+void
+Sdhci<TYPE>::post_tuning()
+{
+  Reg_mix_ctrl mc(this);
+  mc.exe_tune() = 0;
+  mc.write(this);
+}
+
+template <Sdhci_type TYPE>
+bool
+Sdhci<TYPE>::execute_manual_tuning(Send_tuning const &send_tuning)
+{
+  reset_tuning();
+
+  Tuning_regs regs(this);
+  Reg_sys_ctrl sc = regs.sc;
+  // Let a tuning command with a bad delay fail quickly (84 ms at 200 MHz).
+  regs.sc.dtocv() = Reg_sys_ctrl::Sdclk_2_24;
+
+  // Find the largest window of delays passing the tuning command.
+  unsigned win_min = 0;
+  unsigned win_len = 0;
+  unsigned min = 0;
+  while (min < Tuning_delay_cells)
+    {
+      for (; min < Tuning_delay_cells; ++min)
+        {
+          prepare_tuning(min, regs);
+          if (send_tuning())
+            break;
+        }
+      if (min >= Tuning_delay_cells)
+        break;
+
+      unsigned max = min + 1;
+      for (; max < Tuning_delay_cells; ++max)
+        {
+          prepare_tuning(max, regs);
+          if (!send_tuning())
+            break;
+        }
+
+      trace.printf("Tuning passed with delay cells %u-%u.\n", min, max - 1);
+      if (max - min > win_len)
+        {
+          win_min = min;
+          win_len = max - min;
+        }
+
+      min = max + 1;
+    }
+
+  bool success = false;
+  unsigned cells = win_len ? win_min + (win_len - 1) / 2 : 0;
+  if (win_len)
+    {
+      prepare_tuning(cells, regs);
+
+      // Leave room around the sampling point for the auto tuning logic.
+      Reg_clk_tune_ctrl_status cs;
+      cs.dly_cell_set_pre() = cells > Auto_tuning_window
+                              ? cells - Auto_tuning_window : 0;
+      cs.dly_cell_set_out() = Auto_tuning_window;
+      cs.dly_cell_set_post() = Auto_tuning_window;
+      cs.write(this);
+      if (!Util::poll(10, [this, cs]
+                      {
+                        Reg_clk_tune_ctrl_status s(this);
+                        return s.tap_sel_pre() == cs.dly_cell_set_pre()
+                               && s.tap_sel_out() == cs.dly_cell_set_out()
+                               && s.tap_sel_post() == cs.dly_cell_set_post();
+                      }, "Apply tuning delay", false))
+        warn.printf("Tuning delay not applied (%08x).\n",
+                    Reg_clk_tune_ctrl_status(this).raw);
+
+      success = send_tuning();
+    }
+
+  post_tuning();
+  sc.write(this);
+  Reg_prot_ctrl(regs.pc.raw).write(this);
+
+  if (success)
+    warn.printf("Manual tuning: delay cells %u-%u pass, using %u.\n",
+                win_min, win_min + win_len - 1, cells);
+  else
+    {
+      if (win_len)
+        warn.printf("Manual tuning: delay cells %u-%u pass, %u fails.\n",
+                    win_min, win_min + win_len - 1, cells);
+      else
+        warn.printf("Manual tuning: no delay cell passes.\n");
+      reset_tuning();
+    }
+
+  return success;
 }
 
 template <Sdhci_type TYPE>

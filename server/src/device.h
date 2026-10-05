@@ -277,10 +277,20 @@ private:
    *
    * \param cmd         Command context.
    * \param tuning_cmd  CMD19 (SD) or CMD21 (eMMC).
+   * \param bus_width   Current bus width.
    *
    * \retval true  Tuning succeeded.
    */
-  bool execute_tuning(Cmd *cmd, l4_uint32_t tuning_cmd);
+  bool execute_tuning(Cmd *cmd, l4_uint32_t tuning_cmd,
+                      Mmc::Bus_width bus_width);
+
+  /**
+   * Send one tuning command and check the received tuning block.
+   *
+   * \retval true  The tuning block was received correctly.
+   */
+  bool send_tuning_block(Cmd *cmd, l4_uint32_t tuning_cmd,
+                         Mmc::Bus_width bus_width);
 
   void adapt_ocr(Mmc::Reg_ocr ocr_dev, Mmc::Arg_acmd41_sd_send_op *a41);
 
