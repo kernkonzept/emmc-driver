@@ -1335,10 +1335,8 @@ Device<Driver>::power_up_sd(Cmd *cmd)
               _device_type_disable.sd |= mmc_timing;
               info.printf("\033[31mTuning for mode '%s' failed!\033[m\n",
                           Mmc::str_timing(mmc_timing));
-              _drv.set_clock_and_timing(0, Mmc::Legacy);
+              _drv.set_clock_and_timing(400 * KHz, Mmc::Legacy);
               _drv.reset_tuning();
-
-              // Seems this doesn't work. Need to reset more state?
               continue;
             }
 
@@ -1576,6 +1574,11 @@ Device<Driver>::power_up_mmc(Cmd *cmd)
   // slower supported mode by masking modes using _device_type_restricted.
   for (;;)
     {
+      // The previous mode failed: switch to the next mode at a clock which
+      // all timings support.
+      if (device_type_test.raw)
+        _drv.set_clock_and_timing(400 * KHz, Mmc::Legacy);
+
       _device_type_restricted.raw &= ~device_type_test.raw;
       device_type_test.raw = 0;
 
