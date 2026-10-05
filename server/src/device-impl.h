@@ -899,6 +899,31 @@ Device<Driver>::mmc_set_timing(Cmd *cmd,
 }
 
 template <class Driver>
+bool
+Device<Driver>::execute_tuning(Cmd *cmd, l4_uint32_t tuning_cmd)
+{
+  unsigned max_loops = Mmc::Arg_cmd21_send_tuning_block::Max_loops;
+  if (tuning_cmd == Mmc::Cmd19_send_tuning_block)
+    max_loops = Mmc::Arg_cmd19_send_tuning_block::Max_loops;
+
+  for (unsigned i = 0; i < max_loops; ++i)
+    {
+      cmd->init(tuning_cmd);
+      cmd_exec(cmd);
+      if (cmd->status == Cmd::Success)
+        {
+          bool success = false;
+          if (_drv.tuning_finished(&success))
+            return success;
+        }
+      else if (cmd->status == Cmd::Cmd_timeout)
+        break;
+    }
+
+  return false;
+}
+
+template <class Driver>
 void
 Device<Driver>::adapt_ocr(Mmc::Reg_ocr ocr_dev, Mmc::Arg_acmd41_sd_send_op *a41)
 {
@@ -1305,21 +1330,7 @@ Device<Driver>::power_up_sd(Cmd *cmd)
         {
           info.printf("Mode '%s' needs tuning...\n", Mmc::str_timing(mmc_timing));
           _drv.reset_tuning();
-          bool success = false;
-          unsigned i;
-          for (i = 0; i < Mmc::Arg_cmd19_send_tuning_block::Max_loops; ++i)
-            {
-              cmd->init(Mmc::Cmd19_send_tuning_block);
-              cmd_exec(cmd);
-              if (cmd->status == Cmd::Success)
-                {
-                  if (_drv.tuning_finished(&success))
-                    break;
-                }
-              else if (cmd->status == Cmd::Cmd_timeout)
-                break;
-            }
-          if (!success)
+          if (!execute_tuning(cmd, Mmc::Cmd19_send_tuning_block))
             {
               _device_type_disable.sd |= mmc_timing;
               info.printf("\033[31mTuning for mode '%s' failed!\033[m\n",
@@ -1636,25 +1647,9 @@ Device<Driver>::power_up_mmc(Cmd *cmd)
           if (cmd->error())
             continue;
 
-          if (device_type_test.hs200_sdr_18())
-            {
-              bool success = false;
-              unsigned i;
-              for (i = 0; i < Mmc::Arg_cmd21_send_tuning_block::Max_loops; ++i)
-                {
-                  cmd->init(Mmc::Cmd21_send_tuning_block);
-                  cmd_exec(cmd);
-                  if (cmd->status == Cmd::Success)
-                    {
-                      if (_drv.tuning_finished(&success))
-                        break;
-                    }
-                  else if (cmd->status == Cmd::Cmd_timeout)
-                    break;
-                }
-              if (!success)
-                continue;
-            }
+          if (device_type_test.hs200_sdr_18()
+              && !execute_tuning(cmd, Mmc::Cmd21_send_tuning_block))
+            continue;
         }
 
       if (_device_type_restricted.hs400_ddr_18())

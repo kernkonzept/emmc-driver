@@ -272,6 +272,16 @@ private:
   void mmc_set_bus_width(Cmd *cmd, Mmc::Reg_ecsd::Ec183_bus_width::Width width,
                          bool strobe = false);
 
+  /**
+   * Tune the sampling point for the current timing.
+   *
+   * \param cmd         Command context.
+   * \param tuning_cmd  CMD19 (SD) or CMD21 (eMMC).
+   *
+   * \retval true  Tuning succeeded.
+   */
+  bool execute_tuning(Cmd *cmd, l4_uint32_t tuning_cmd);
+
   void adapt_ocr(Mmc::Reg_ocr ocr_dev, Mmc::Arg_acmd41_sd_send_op *a41);
 
   void exec_mmc_switch(Cmd *cmd, l4_uint8_t idx, l4_uint8_t val,
