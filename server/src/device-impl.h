@@ -1661,7 +1661,8 @@ Device<Driver>::power_up_mmc(Cmd *cmd)
           hs_timing  = Mmc::Reg_ecsd::Ec185_hs_timing::Timing::Hs200;
           mmc_timing = Mmc::Mmc_hs200;
           bus_width  = Mmc::Reg_ecsd::Ec183_bus_width::W_8bit_sdr;
-          device_type_test.hs400_ddr_18() = 1;
+          device_type_test.hs400_ddr_18() =
+            _device_type_restricted.hs400_ddr_18();
           device_type_test.hs200_sdr_18() = 1;
         }
       else if (_device_type_restricted.hs52_ddr_18())
