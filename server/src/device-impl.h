@@ -1634,10 +1634,18 @@ Device<Driver>::power_up_mmc(Cmd *cmd)
   // slower supported mode by masking modes using _device_type_restricted.
   for (;;)
     {
-      // The previous mode failed: switch to the next mode at a clock which
-      // all timings support.
+      /*
+       * The previous mode failed: continue at a clock which all timings
+       * support. HS400 requires a dual data rate bus, so return to HS timing
+       * before the next mode switches the bus width.
+       */
       if (device_type_test.raw)
-        _drv.set_clock_and_timing(400 * KHz, Mmc::Legacy);
+        {
+          _drv.set_clock_and_timing(400 * KHz, Mmc::Legacy);
+          Mmc::Reg_ecsd::Ec185_hs_timing ht(0);
+          ht.timing_interface() = Mmc::Reg_ecsd::Ec185_hs_timing::Timing::Hs;
+          exec_mmc_switch(cmd, ht.index(), ht.raw);
+        }
 
       _device_type_restricted.raw &= ~device_type_test.raw;
       device_type_test.raw = 0;
