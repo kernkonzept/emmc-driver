@@ -817,8 +817,11 @@ Device<Driver>::mmc_set_bus_width(Cmd *cmd,
   if (cmd->error())
     warn.printf("Set bus width (%s) failed.\n", bw.str_bus_width());
   else if (cmd->switch_error())
-    warn.printf("Set bus width (%s) failed (status %08x).\n",
-                bw.str_bus_width(), cmd->mmc_status().raw);
+    {
+      warn.printf("Set bus width (%s) failed (status %08x).\n",
+                  bw.str_bus_width(), cmd->mmc_status().raw);
+      cmd->status = Cmd::Error;
+    }
   else
     {
       Mmc::Bus_width host_width;
