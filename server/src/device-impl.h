@@ -69,15 +69,6 @@ Device<Driver>::Device(int nr, l4_uint64_t mmio_addr, l4_uint64_t mmio_size,
   trace2(Dbg::Trace2, "device", nr),
   _device_type_disable(dt_disable)
 {
-  if (flags & Device_flags::Manual_tuning)
-    {
-      _device_type_disable.mmc.hs200_sdr_18() = 1;
-      _device_type_disable.mmc.hs200_sdr_12() = 1;
-      _device_type_disable.mmc.hs400_ddr_18() = 1;
-      _device_type_disable.mmc.hs400_ddr_12() = 1;
-      _device_type_disable.sd |= Mmc::Uhs_sdr50 | Mmc::Uhs_sdr104;
-    }
-
   _drv.mask_interrupts();
 
   if (!_drv.dma_accessible(_io_buf.pget(), _io_buf.size()))
