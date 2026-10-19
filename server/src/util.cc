@@ -112,7 +112,8 @@ Util::tsc_init()
 }
 
 bool
-Util::poll(l4_cpu_time_t us, Util::Poll_timeout_handler handler, char const *s)
+Util::poll(l4_cpu_time_t us, Util::Poll_timeout_handler handler,
+           char const *s, bool fatal)
 {
   info.printf("Waiting for '%s'...\n", s);
   l4_uint64_t time = read_tsc();
@@ -127,6 +128,9 @@ Util::poll(l4_cpu_time_t us, Util::Poll_timeout_handler handler, char const *s)
           if (l4_kip_clock(kip) >= end)
             {
               trace.printf("...timeout.\n");
+              if (!fatal)
+                return false;
+
               L4Re::throw_error(-L4_EIO, s);
             }
         }

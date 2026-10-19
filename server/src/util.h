@@ -35,14 +35,18 @@ struct Util
    *                 kernel clock (usually milliseconds).
    * \param handler  The function to be called while polling. If this function
    *                 returns true, the polling loop is aborted.
+   * \param s        Describing string.
+   * \param fatal    If true, trigger an exception in case the handler did never
+   *                 return true within the polling interval. If false, return
+   *                 false if the handler did never return true within the
+   *                 polling interval.
    *
-   * \retval false The handler did not return true within the polling interval.
-   *               Actually this cannot happen: If the polling interval is
-   *               exceeded, an exception is triggered.
-   * \retval true The handler returned true within the polling interval.
+   * \retval false The handler did not return true within the polling interval
+   *               and 'fatal' was set to false.
+   * \retval true  The handler returned true within the polling interval.
    */
   static bool poll(l4_cpu_time_t us, Poll_timeout_handler handler,
-                   char const *s);
+                   char const *s, bool fatal = true);
 
   /**
    * Determine if fine-grained clock available.
