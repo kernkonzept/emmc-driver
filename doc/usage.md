@@ -270,7 +270,7 @@ L4.default_loader:start({
 The eMMC driver supports SDHCI and SDHI controllers, in particular
 - SDHI interfaces found on RCar3 r8a7795 boards
 - SDHCI interfaces found on RPI4
-- uSDHCI interfaces found on i.MX8 boards
+- uSDHCI interfaces found on i.MX8 boards and i.MX95 boards
 - uSDHCI interfaces found on the S32G SoC
 - the QEMU SD card emulation (SDHCI, see `doc/pcie-ecam.io`),
 - the QEMU eMMC emulation (provided by extending the QEMU SD card emulation by
