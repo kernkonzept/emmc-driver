@@ -118,7 +118,7 @@ private:
      * This saves the preceding CMD23 for a multi-read/write command and
      * the corresponding interrupt.
      *
-     * Only for uSDHCI and iproc/arasan.
+     * Only for uSDHC and iproc/arasan.
      */
     Auto_cmd23 = true,
 
