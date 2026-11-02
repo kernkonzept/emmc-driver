@@ -193,7 +193,7 @@ caps:
       device.**
       Required for finding the service providing access to the firmware mbox
       device which is used to perform voltage switching for certain SD card
-      configuations. This is either the Io server or the bcm2835-mbox-driver
+      configurations. This is either the Io server or the bcm2835-mbox-driver
       service.
     protocol: 'ipc'
     mandatory: true

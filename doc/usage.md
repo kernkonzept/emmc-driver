@@ -18,22 +18,27 @@ The eMMC driver is a driver for eMMC controllers.
 
   Mandatory capability.
 
+
 * `vbus_mbox`
 
   **Only used by the SDHCI driver when attaching to a bcm2711-compatible
   device.** Required for finding the service providing access to the firmware
   mbox device which is used to perform voltage switching for certain SD card
-  configuations. This is either the Io server or the bcm2835-mbox-driver
+  configurations. This is either the Io server or the bcm2835-mbox-driver
   service.
 
   Mandatory capability.
+
 
 * `client`
 
   Static client
 
-  Needs server right. Multiple capability names can be provided by the
-  `--client <cap_name>` command line parameter.
+  Needs server right.
+
+  Multiple capability names can be provided by the `--client <cap_name>` command
+  line parameter.
+
 
 * `bbds`
 
@@ -64,6 +69,7 @@ The eMMC driver is a driver for eMMC controllers.
 
   Multiple capability names can be provided by the `-d <cap_name>`,
   `--register-ds <cap_name>` command line parameter.
+
 
 * `svr`
 
@@ -143,8 +149,7 @@ line options:
 
   This parameter opens a scope for the following subparameters:
 
-  *
-  `--device <<PSN> | <PSN>:<PARTNUM> | [partuuid:]<UUID> | [partlabel:]<LABEL>>`
+  * `--device <<PSN> | <PSN>:<PARTNUM> | [partuuid:]<UUID> | [partlabel:]<LABEL>>`
 
     This option denotes either the eMMC device, or a partition on such a device
     to be exported for the client specified in the preceding `client` option.
