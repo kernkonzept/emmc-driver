@@ -212,6 +212,12 @@ caps:
       entire read/write request. That means that the buffer is divided into
       the number of maximum segments (see `--max-seg` parameter).
     protocol: 'dataspace'
+  - name: 'iobuf'
+    desc: |
+      Page (4096 bytes) for retriving data from the device via DMA during the
+      setup phase. If this capability is not provided, the driver will allocate
+      an arbitrary page.
+    protocol: 'dataspace'
   - name: 'sdhci_adma_buf'
     desc: |
       **Only used by the SDHCI driver.**

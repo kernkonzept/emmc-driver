@@ -49,6 +49,12 @@ The eMMC driver is a driver for eMMC controllers.
   request. That means that the buffer is divided into the number of maximum
   segments (see `--max-seg` parameter).
 
+* `iobuf`
+
+  Page (4096 bytes) for retriving data from the device via DMA during the setup
+  phase. If this capability is not provided, the driver will allocate an
+  arbitrary page.
+
 * `sdhci_adma_buf`
 
   **Only used by the SDHCI driver.** Page (4096 bytes) for storing DMA
